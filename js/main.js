@@ -14,7 +14,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS } from './config.js';
+import { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN } from './config.js';
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
 const maplibregl = window.maplibregl;
@@ -33,6 +33,36 @@ const DEG = Math.PI / 180; // multiply degrees by this to get radians
 // OpenFreeMap serves free map tiles built from OpenStreetMap data —
 // no API key or account needed. The "style" URL describes colors,
 // fonts, and where the street/building data comes from.
+
+// --- Ocean-flattening filter for elevation tiles ---
+// The free elevation data includes the sea FLOOR (bathymetry) — the bay
+// would render as a 100 m-deep pit and the Golden Gate's towers would
+// sink into it. So we register our own "flatdem://" tile protocol: it
+// downloads each tile, and any pixel encoding a below-sea-level height
+// gets rewritten to exactly sea level before the map ever sees it.
+// (Terrarium encoding: height = R*256 + G + B/256 - 32768, so any pixel
+// with R < 128 is below sea level, and (128, 0, 0) is exactly 0.)
+maplibregl.addProtocol('flatdem', async (params) => {
+  const url = params.url.replace('flatdem://', 'https://');
+  const blob = await (await fetch(url)).blob();
+  const bitmap = await createImageBitmap(blob, {
+    premultiplyAlpha: 'none',
+    colorSpaceConversion: 'none',
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, 0, 0);
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const px = image.data; // [R,G,B,A, R,G,B,A, ...]
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i] < 128) { px[i] = 128; px[i + 1] = 0; px[i + 2] = 0; }
+  }
+  ctx.putImageData(image, 0, 0);
+  const out = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  return { data: await out.arrayBuffer() };
+});
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -103,7 +133,32 @@ map.on('load', () => {
   // full knowledge of the buildings' depth — that's what lets a
   // building correctly hide the car when it drives behind one.
   map.addLayer(gameLayer);
+
+  // --- 3D terrain: hills and mountains ---
+  if (TERRAIN.ENABLED) {
+    map.addSource('terrain-dem', {
+      type: 'raster-dem',
+      tiles: [TERRAIN.TILES],
+      encoding: 'terrarium',
+      tileSize: 256,
+      maxzoom: 13,
+      attribution: 'Terrain: Mapzen/AWS Open Data',
+    });
+    map.setTerrain({ source: 'terrain-dem', exaggeration: TERRAIN.EXAGGERATION });
+  }
 });
+
+// Ground elevation (meters above sea level) at a point. Returns the
+// fallback when terrain is off or that area's elevation tiles haven't
+// downloaded yet (e.g. right after spawning, or far from the camera).
+function groundAt(lng, lat, fallback = 0) {
+  if (!TERRAIN.ENABLED || !map.queryTerrainElevation) return fallback;
+  const elevation = map.queryTerrainElevation([lng, lat]);
+  if (elevation === null || elevation === undefined || Number.isNaN(elevation)) {
+    return fallback;
+  }
+  return Math.max(0, elevation); // our ocean filter makes water = 0
+}
 
 
 // ============================================================
@@ -115,7 +170,8 @@ map.on('load', () => {
 const car = {
   lng: START.lngLat[0],
   lat: START.lngLat[1],
-  alt: 0,               // altitude in meters above the ground
+  alt: 0,               // altitude in meters above SEA LEVEL
+  ground: 0,            // terrain height under the car right now
   heading: START.heading, // compass direction in radians (0 = north)
   vx: 0,                // eastward speed, meters/second
   vy: 0,                // northward speed, meters/second
@@ -287,7 +343,7 @@ document.getElementById('btn-mode').addEventListener('pointerdown', (e) => {
 function resetCar() {
   car.lng = START.lngLat[0];
   car.lat = START.lngLat[1];
-  car.alt = 0;
+  car.alt = groundAt(car.lng, car.lat, 0);
   car.heading = START.heading;
   car.vx = 0;
   car.vy = 0;
@@ -473,7 +529,9 @@ function buildBridges() {
     // the ground, so the outer segments naturally become the ramps.
     const deckPts = b.deck.map((p, i) => {
       const grounded = i === 0 || i === b.deck.length - 1;
-      return toScene(p[0], p[1], grounded ? 1 : b.deckHeight);
+      // Ground points may carry their own elevation (p[2]) — the
+      // Golden Gate's ends sit on bluffs, not at sea level.
+      return toScene(p[0], p[1], grounded ? (p[2] ?? 1) : b.deckHeight);
     });
     for (let i = 0; i < deckPts.length - 1; i++) {
       const a = deckPts[i];
@@ -591,7 +649,8 @@ function buildTrees() {
   let i = 0;
 
   for (const spot of TREE_SPOTS) {
-    const center = toScene(spot.center[0], spot.center[1], 0);
+    // Each park sits at its own elevation now that hills exist.
+    const center = toScene(spot.center[0], spot.center[1], spot.baseAlt ?? 0);
     for (let n = 0; n < spot.count; n++, i++) {
       // Random point in a circle. sqrt() makes the spread even —
       // without it trees would crowd the center.
@@ -601,11 +660,11 @@ function buildTrees() {
       const z = center.z + Math.sin(ang) * r;
       const s = 0.7 + rand() * 0.9; // each tree its own size
 
-      matrix.compose(new THREE.Vector3(x, 1.5 * s, z), quat,
+      matrix.compose(new THREE.Vector3(x, center.y + 1.5 * s, z), quat,
                      new THREE.Vector3(s, s, s));
       trunks.setMatrixAt(i, matrix);
 
-      matrix.compose(new THREE.Vector3(x, 4.4 * s, z), quat,
+      matrix.compose(new THREE.Vector3(x, center.y + 4.4 * s, z), quat,
                      new THREE.Vector3(s, s, s));
       canopies.setMatrixAt(i, matrix);
       // Each canopy gets its own shade of green.
@@ -730,15 +789,18 @@ function updateSceneObjects(timeSeconds) {
     pod.scale.y += (podStretch - pod.scale.y) * 0.2;
   }
 
-  // --- Shadow: on the ground, fading with altitude ---
-  three.shadow.position.copy(toScene(car.lng, car.lat, 0.3));
-  three.shadow.material.opacity = Math.max(0, 0.4 - car.alt / 400);
-  const spread = 1 + car.alt / 180;
+  // --- Shadow: on the ground (wherever the terrain puts it), fading
+  // with the car's height above that ground ---
+  const heightAboveGround = car.alt - car.ground;
+  three.shadow.position.copy(toScene(car.lng, car.lat, car.ground + 0.3));
+  three.shadow.material.opacity = Math.max(0, 0.4 - heightAboveGround / 400);
+  const spread = 1 + heightAboveGround / 180;
   three.shadow.scale.set(spread, spread, 1);
 
-  // --- Beacon at the current target, gently pulsing ---
+  // --- Beacon at the current target, standing on its terrain ---
   const target = BEACONS[state.targetIndex];
-  three.beaconGroup.position.copy(toScene(target.lngLat[0], target.lngLat[1], 0));
+  const targetGround = groundAt(target.lngLat[0], target.lngLat[1], 0);
+  three.beaconGroup.position.copy(toScene(target.lngLat[0], target.lngLat[1], targetGround));
   three.beamMaterial.opacity = 0.26 + 0.1 * Math.sin(timeSeconds * 3);
   three.ring.rotation.z = timeSeconds * 0.8;
 }
@@ -756,6 +818,10 @@ function updatePhysics(dt) {
   prev.lng = car.lng;
   prev.lat = car.lat;
   prev.alt = car.alt;
+
+  // How high is the terrain here? (Falls back to last frame's answer
+  // while elevation tiles are still downloading.)
+  car.ground = groundAt(car.lng, car.lat, car.ground);
 
   // --- Combine the two input sources into one -1..1 value per axis ---
   // Keyboard keys give a full -1 or +1; the joystick adds its analog
@@ -794,7 +860,8 @@ function updatePhysics(dt) {
   // exp(-k·dt) is the frame-rate-independent way to say
   // "lose k-ish fraction of this speed per second".
   fwdSpeed *= Math.exp(-PHYSICS.DRAG * dt);
-  const grip = car.alt < 1 ? PHYSICS.GRIP_GROUND : PHYSICS.GRIP_AIR;
+  const onGround = car.alt < car.ground + 1;
+  const grip = onGround ? PHYSICS.GRIP_GROUND : PHYSICS.GRIP_AIR;
   sideSpeed *= Math.exp(-grip * dt);
 
   fwdSpeed = Math.max(-PHYSICS.MAX_REVERSE, Math.min(PHYSICS.MAX_SPEED, fwdSpeed));
@@ -822,9 +889,12 @@ function updatePhysics(dt) {
   car.vAlt *= Math.exp(-vDrag * dt);
   car.alt += car.vAlt * dt;
 
-  // The ground is solid.
-  if (car.alt <= 0) {
-    car.alt = 0;
+  // The ground is solid — and with terrain, "the ground" is wherever
+  // the hill under you happens to be. Driving uphill, this clamp is
+  // what carries the car up the slope; driving off a crest, gravity
+  // takes over and you catch air.
+  if (car.alt <= car.ground) {
+    car.alt = car.ground;
     car.vAlt = Math.max(0, car.vAlt);
   }
 
@@ -930,8 +1000,12 @@ function buildingHeightAt(lng, lat) {
 function checkCollisions(nowMs) {
   refreshBuildingCache(nowMs);
 
-  const roof = buildingHeightAt(car.lng, car.lat);
-  if (roof === 0 || car.alt >= roof) return; // open ground or above it
+  const height = buildingHeightAt(car.lng, car.lat);
+  if (height === 0) return;                  // open ground
+  // Building heights are measured from their base, so the roof's real
+  // altitude is the terrain under it plus the building's height.
+  const roof = car.ground + height;
+  if (car.alt >= roof) return;               // flying above it
 
   if (prev.alt >= roof) {
     // We came from above → touch down on the roof. Rooftop landings
