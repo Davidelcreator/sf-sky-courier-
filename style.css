@@ -195,8 +195,8 @@ body.touch #readouts {                        /* make room for the buttons */
   gap: 14px;
 }
 
-/* CAM and MODE are tap-toggles, so they're smaller pills above FLY. */
-#btn-mode, #btn-cam {
+/* VEH, CAM and MODE are tap-toggles, so they're smaller pills above FLY. */
+#btn-mode, #btn-cam, #btn-veh {
   width: auto;
   height: 40px;
   padding: 0 18px;

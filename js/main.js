@@ -14,7 +14,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN } from './config.js';
+import { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES } from './config.js';
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
 const maplibregl = window.maplibregl;
@@ -192,7 +192,12 @@ const state = {
   camZoom: CAMERA.MODES[0].zoom,   // current zoom/pitch — these chase the
   camPitch: CAMERA.MODES[0].pitch, // preset's values smoothly, no hard cuts
   zoomNudge: 0,         // extra zoom from the mouse wheel, -1..1
+  vehicle: 0,           // which VEHICLES entry we're driving
 };
+
+// The ACTIVE physics numbers: the defaults, with the current vehicle's
+// overrides spread on top. Rebuilt every time you switch vehicles.
+let phys = { ...PHYSICS, ...VEHICLES[0].physics };
 
 // Handy while learning: open the browser console (F12) and type
 // `game.car` or `game.state` to watch the numbers change live.
@@ -364,6 +369,31 @@ window.addEventListener('wheel', (e) => {
   state.zoomNudge = Math.max(-1, Math.min(1, state.zoomNudge - e.deltaY * 0.001));
 }, { passive: true });
 
+// --- Vehicle switching ---
+// V key (or the VEH button) cycles the garage. Switching swaps both the
+// 3D model and the physics numbers (see VEHICLES in config.js).
+function applyVehicleVisibility() {
+  const modelName = VEHICLES[state.vehicle].model;
+  if (three.carModel) three.carModel.visible = modelName === 'car';
+  if (three.ufoModel) three.ufoModel.visible = modelName === 'ufo';
+}
+
+function switchVehicle() {
+  state.vehicle = (state.vehicle + 1) % VEHICLES.length;
+  phys = { ...PHYSICS, ...VEHICLES[state.vehicle].physics };
+  applyVehicleVisibility();
+  flashMessage(`VEHICLE: ${VEHICLES[state.vehicle].name}`, 1400);
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyV' && state.running) switchVehicle();
+});
+
+document.getElementById('btn-veh').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (state.running) switchVehicle();
+});
+
 // --- Reset key ---
 // Stranded in the bay? Press R to teleport back to the start.
 function resetCar() {
@@ -445,13 +475,19 @@ function buildCar() {
   const carBody = new THREE.Group();
   carGroup.add(carBody);
 
+  // The car's meshes live in their own sub-group so the whole model can
+  // be hidden when you switch to another vehicle (carBody keeps doing
+  // the cosmetic tilting for whichever model is visible).
+  const carModel = new THREE.Group();
+  carBody.add(carModel);
+
   // Main chassis (a rounded-ish red wedge). BoxGeometry(width, height, length).
   const chassis = new THREE.Mesh(
     new THREE.BoxGeometry(2.0, 0.6, 4.2),
     new THREE.MeshLambertMaterial({ color: 0xff4757 }),
   );
   chassis.position.y = 0.5;
-  carBody.add(chassis);
+  carModel.add(chassis);
 
   // Cabin: a dark glass box on top, slightly toward the back.
   const cabin = new THREE.Mesh(
@@ -459,7 +495,7 @@ function buildCar() {
     new THREE.MeshLambertMaterial({ color: 0x18222f }),
   );
   cabin.position.set(0, 1.05, 0.2);
-  carBody.add(cabin);
+  carModel.add(cabin);
 
   // Tail fin, because flying cars need one.
   const fin = new THREE.Mesh(
@@ -467,7 +503,7 @@ function buildCar() {
     new THREE.MeshLambertMaterial({ color: 0xff4757 }),
   );
   fin.position.set(0, 1.1, 1.8);
-  carBody.add(fin);
+  carModel.add(fin);
 
   // Four glowing thruster pods at the corners. MeshBasicMaterial ignores
   // lighting, so it always looks like it's glowing.
@@ -476,7 +512,7 @@ function buildCar() {
   for (const [x, z] of [[-0.95, -1.5], [0.95, -1.5], [-0.95, 1.5], [0.95, 1.5]]) {
     const pod = new THREE.Mesh(thrusterGeo, thrusterMat);
     pod.position.set(x, 0.25, z);
-    carBody.add(pod);
+    carModel.add(pod);
     three.thrusters.push(pod);
   }
 
@@ -486,11 +522,61 @@ function buildCar() {
   for (const x of [-0.6, 0.6]) {
     const headlight = new THREE.Mesh(lightGeo, lightMat);
     headlight.position.set(x, 0.55, -2.1);
-    carBody.add(headlight);
+    carModel.add(headlight);
   }
 
   carGroup.scale.setScalar(GAME.CAR_SCALE);
-  return { carGroup, carBody };
+  return { carGroup, carBody, carModel };
+}
+
+// The UFO — a garage-built flying saucer in the spirit of a certain
+// mad scientist's: squashed metal hull, glass dome, spinning rim
+// lights, and a glow that flares when you thrust.
+function buildUfoModel() {
+  const ufo = new THREE.Group();
+
+  // Hull: a sphere squashed flat into a saucer.
+  const hull = new THREE.Mesh(
+    new THREE.SphereGeometry(2.8, 24, 12),
+    new THREE.MeshLambertMaterial({ color: 0xb9c2cc }),
+  );
+  hull.scale.y = 0.32;
+  hull.position.y = 0.9;
+  ufo.add(hull);
+
+  // Glass dome: the top half of a sphere, see-through.
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(1.35, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshLambertMaterial({ color: 0xa8e6ff, transparent: true, opacity: 0.45 }),
+  );
+  dome.position.y = 1.5;
+  ufo.add(dome);
+
+  // Ten rim lights in a circle — the group spins for the classic look.
+  const rim = new THREE.Group();
+  const bulbGeo = new THREE.SphereGeometry(0.22, 8, 8);
+  const bulbMat = new THREE.MeshBasicMaterial({ color: 0x7dff9a });
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * Math.PI * 2;
+    const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+    bulb.position.set(Math.cos(angle) * 2.5, 0.9, Math.sin(angle) * 2.5);
+    rim.add(bulb);
+  }
+  ufo.add(rim);
+
+  // Under-glow disc (brightens while thrusting).
+  const glow = new THREE.Mesh(
+    new THREE.CircleGeometry(1.6, 20),
+    new THREE.MeshBasicMaterial({
+      color: 0x7dff9a, transparent: true, opacity: 0.35,
+      side: THREE.DoubleSide, depthWrite: false,
+    }),
+  );
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = 0.25;
+  ufo.add(glow);
+
+  return { ufo, rim, glow };
 }
 
 // The delivery beacon: a tall glowing pillar of light you can see from
@@ -734,10 +820,19 @@ const gameLayer = {
     sun.position.set(0.5, 1, 0.4);
     three.scene.add(sun);
 
-    const { carGroup, carBody } = buildCar();
+    const { carGroup, carBody, carModel } = buildCar();
     three.carGroup = carGroup;
     three.carBody = carBody;
+    three.carModel = carModel;
     three.scene.add(carGroup);
+
+    // The UFO rides in the same tilt group; only one model is visible.
+    const { ufo, rim, glow } = buildUfoModel();
+    three.ufoModel = ufo;
+    three.ufoRim = rim;
+    three.ufoGlow = glow;
+    carBody.add(ufo);
+    applyVehicleVisibility();
 
     const { beaconGroup, beamMaterial, ring } = buildBeacon();
     three.beaconGroup = beaconGroup;
@@ -815,6 +910,13 @@ function updateSceneObjects(timeSeconds) {
     pod.scale.y += (podStretch - pod.scale.y) * 0.2;
   }
 
+  // UFO: rim lights spin, under-glow flares while thrusting.
+  if (three.ufoModel && three.ufoModel.visible) {
+    three.ufoRim.rotation.y = timeSeconds * 2.2;
+    three.ufoGlow.material.opacity =
+      keys.thrust ? 0.75 : 0.3 + 0.1 * Math.sin(timeSeconds * 4);
+  }
+
   // --- Shadow: on the ground (wherever the terrain puts it), fading
   // with the car's height above that ground ---
   const heightAboveGround = car.alt - car.ground;
@@ -861,7 +963,7 @@ function updatePhysics(dt) {
   // A real car barely turns when crawling; scale turning with speed
   // (but keep some, so you can rotate while hovering).
   const turnFactor = 0.35 + 0.65 * Math.min(1, horizSpeed / 15);
-  car.heading += input.steer * PHYSICS.TURN_RATE * turnFactor * dt;
+  car.heading += input.steer * phys.TURN_RATE * turnFactor * dt;
 
   // --- Thrust forward/backward along our heading ---
   // sin/cos convert "compass angle" into an east/north direction vector.
@@ -870,7 +972,7 @@ function updatePhysics(dt) {
   // One line handles both: a positive throttle accelerates, a negative
   // one (joystick pulled back, or S held) brakes/reverses.
   if (input.throttle !== 0) {
-    const power = input.throttle > 0 ? PHYSICS.ACCEL : PHYSICS.BRAKE;
+    const power = input.throttle > 0 ? phys.ACCEL : phys.BRAKE;
     car.vx += fwdE * power * input.throttle * dt;
     car.vy += fwdN * power * input.throttle * dt;
   }
@@ -885,33 +987,33 @@ function updatePhysics(dt) {
 
   // exp(-k·dt) is the frame-rate-independent way to say
   // "lose k-ish fraction of this speed per second".
-  fwdSpeed *= Math.exp(-PHYSICS.DRAG * dt);
+  fwdSpeed *= Math.exp(-phys.DRAG * dt);
   const onGround = car.alt < car.ground + 1;
-  const grip = onGround ? PHYSICS.GRIP_GROUND : PHYSICS.GRIP_AIR;
+  const grip = onGround ? phys.GRIP_GROUND : phys.GRIP_AIR;
   sideSpeed *= Math.exp(-grip * dt);
 
-  fwdSpeed = Math.max(-PHYSICS.MAX_REVERSE, Math.min(PHYSICS.MAX_SPEED, fwdSpeed));
+  fwdSpeed = Math.max(-phys.MAX_REVERSE, Math.min(phys.MAX_SPEED, fwdSpeed));
 
   // Recombine the two parts back into east/north velocity.
   car.vx = fwdE * fwdSpeed + sideE * sideSpeed;
   car.vy = fwdN * fwdSpeed + sideN * sideSpeed;
 
   // --- Vertical: thrust vs gravity vs drag ---
-  if (keys.thrust) car.vAlt += PHYSICS.THRUST * dt;
+  if (keys.thrust) car.vAlt += phys.THRUST * dt;
 
   // In GLIDE mode, forward speed makes lift (like wings) that cancels
   // part of gravity. min() caps the lift: gliding always sinks a
   // little, so it can never replace the thrust button.
-  let gravity = PHYSICS.GRAVITY;
+  let gravity = phys.GRAVITY;
   if (state.flightMode === 'glide') {
-    const lift = Math.min(1, horizSpeed / PHYSICS.GLIDE_LIFT_SPEED)
-               * PHYSICS.GLIDE_LIFT_MAX;
+    const lift = Math.min(1, horizSpeed / phys.GLIDE_LIFT_SPEED)
+               * phys.GLIDE_LIFT_MAX;
     gravity *= 1 - lift;
   }
   car.vAlt -= gravity * dt;
 
   const vDrag = state.flightMode === 'glide'
-    ? PHYSICS.GLIDE_VERTICAL_DRAG : PHYSICS.VERTICAL_DRAG;
+    ? phys.GLIDE_VERTICAL_DRAG : phys.VERTICAL_DRAG;
   car.vAlt *= Math.exp(-vDrag * dt);
   car.alt += car.vAlt * dt;
 

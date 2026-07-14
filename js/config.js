@@ -65,6 +65,34 @@ export const PHYSICS = {
   GLIDE_VERTICAL_DRAG: 1.8, // extra air resistance = steadier, floatier feel
 };
 
+// Your garage! Switch vehicles in-game with V (or the VEH button).
+// Each vehicle can override any PHYSICS value above — anything not
+// listed keeps the default. That's the whole vehicle system: same
+// physics engine, different numbers, different 3D model.
+export const VEHICLES = [
+  {
+    name: 'SKY CAR',
+    model: 'car',
+    physics: {}, // the PHYSICS defaults above ARE the car
+  },
+  {
+    name: 'UFO',
+    model: 'ufo',
+    physics: {
+      MAX_SPEED: 420,     // ≈ 940 mph. It is a UFO.
+      ACCEL: 170,         // and it gets there absurdly fast
+      BRAKE: 220,
+      DRAG: 0.4,          // note 170/0.4 ≈ 425 — just above the cap,
+                          // so the cap is actually reachable
+      TURN_RATE: 2.8,     // saucers corner like nothing on Earth...
+      GRIP_AIR: 3.0,      // ...and don't skid sideways through the sky
+      THRUST: 75,
+      GRAVITY: 18,        // built by someone who dislikes gravity
+      VERTICAL_DRAG: 1.2,
+    },
+  },
+];
+
 // Chase camera: follows behind and above the car, looking forward.
 // Press C (or the CAM button) in-game to cycle through MODES.
 //   zoom  = how close the camera sits (higher = closer)
@@ -137,16 +165,20 @@ export const BRIDGES = [
     deckHeight: 67,
     towerHeight: 158,
     drawTowers: true,           // no 3D towers in the map data here
+    // Centerline from the actual I-80 roadway nodes in OSM (way 8921938).
+    // Towers interpolated exactly ALONG that centerline (two per
+    // suspension span, straddling the central anchorage at the midpoint)
+    // so they line up with the road instead of sitting beside it.
     towers: [
-      [-122.3864117, 37.7903444], [-122.3810007, 37.7953129],
-      [-122.3760816, 37.7998298], [-122.3706706, 37.8047983],
+      [-122.3869343, 37.7897352], [-122.3816191, 37.7946986],
+      [-122.3760729, 37.7998779], [-122.3707576, 37.8048412],
     ],
-    cableAnchors: [[-122.3898551, 37.7871827], [-122.3672272, 37.8079600]],
+    cableAnchors: [[-122.3894763, 37.7873614], [-122.3682156, 37.8072151]],
     deck: [
-      [-122.3926836, 37.7845855, 4],    // ground, SoMa
-      [-122.3908389, 37.7862793],
-      [-122.3662434, 37.8088634],
-      [-122.3651366, 37.8098797, 45],   // ground, Yerba Buena tunnel
+      [-122.3921339, 37.7848797, 4],    // ground, SoMa
+      [-122.3904007, 37.7864982],
+      [-122.3672912, 37.8080783],
+      [-122.3662513, 37.8090494, 45],   // ground, Yerba Buena tunnel
     ],
   },
   {
@@ -155,17 +187,18 @@ export const BRIDGES = [
     deckHeight: 25,
     towerHeight: 160,
     drawTowers: true,
-    towers: [[-122.3576000, 37.8158500]], // single SAS tower
-    cableAnchors: [[-122.3596043, 37.8148222], [-122.3558151, 37.8167770]],
+    // Centerline from the actual I-80 roadway nodes in OSM (way 237731428).
+    towers: [[-122.3579449, 37.8151064]], // single SAS tower
+    cableAnchors: [[-122.3606373, 37.8133549], [-122.3552524, 37.8168580]],
     piers: true,
     deck: [
-      [-122.3612000, 37.8140200, 45],   // ground, Yerba Buena tunnel
-      [-122.3604463, 37.8143878],
-      [-122.3520259, 37.8187318],   // the span curves — real OSM points
-      [-122.3436055, 37.8215495],
-      [-122.3335850, 37.8216347],
-      [-122.3277570, 37.8221892],
-      [-122.3258000, 37.8223500, 3],    // ground, Oakland
+      [-122.3648555, 37.8106108, 45],   // ground, Yerba Buena tunnel
+      [-122.3637785, 37.8113114],
+      [-122.3548037, 37.8171499],   // the span curves — real OSM points
+      [-122.3439900, 37.8200228],
+      [-122.3336016, 37.8211781],
+      [-122.3277147, 37.8218311],
+      [-122.3255000, 37.8220845, 3],    // ground, Oakland
     ],
   },
   {

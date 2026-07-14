@@ -17,6 +17,7 @@ solid until you climb above their roofs — and yes, you can land on them.
 | `SPACE` (hold) | Upward thrust — fly!    |
 | `G`            | Toggle HOVER / GLIDE flight |
 | `C`            | Cycle camera angle (chase, close, sky, top-down, cinema) |
+| `V`            | Switch vehicle (sky car / UFO — the UFO tops out ~940 mph) |
 | mouse wheel    | Zoom the camera in/out  |
 | `R`            | Reset back to the start |
 
