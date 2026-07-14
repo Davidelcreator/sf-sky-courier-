@@ -3,9 +3,16 @@
 <head>
   <meta charset="utf-8">
   <title>SF Sky Courier</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Empty favicon so the browser doesn't log a "favicon not found" error -->
-  <link rel="icon" href="data:,">
+  <!-- maximum-scale=1 stops phones from zooming the page while playing -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <!-- Description shown by search engines and link previews -->
+  <meta name="description"
+        content="Fly a delivery car over the real San Francisco — real streets, real 3D buildings, free OpenStreetMap data.">
+  <meta property="og:title" content="SF Sky Courier">
+  <meta property="og:description"
+        content="A flying-car delivery game over the real San Francisco. Drive the streets or hold SPACE and fly.">
+  <!-- A tiny SVG containing an emoji makes a zero-file favicon (tab icon) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>">
 
   <!-- MapLibre GL JS: the open-source library that draws the real 3D map.
        We load it from a CDN (Content Delivery Network) — a public server that
@@ -31,6 +38,7 @@
     <div id="topbar">
       <div class="panel" id="score-box">
         SCORE <span id="score">0</span>
+        <div id="packages">&#128230; 0</div>
       </div>
       <div class="panel" id="compass">
         <!-- This arrow is rotated by JavaScript to point at the target -->
@@ -53,6 +61,23 @@
     <div id="help" class="panel">
       W / &#8593; drive &nbsp;&bull;&nbsp; S / &#8595; brake &nbsp;&bull;&nbsp;
       A D / &#8592; &#8594; steer &nbsp;&bull;&nbsp; hold SPACE to fly
+      &nbsp;&bull;&nbsp; R reset
+    </div>
+
+    <!-- On-screen controls for phones/tablets. Hidden on desktop;
+         JavaScript reveals them when it detects a touch screen. -->
+    <div id="touch-controls">
+      <div id="touch-left">
+        <button class="tbtn" id="btn-left" aria-label="steer left">&#9664;</button>
+        <button class="tbtn" id="btn-right" aria-label="steer right">&#9654;</button>
+      </div>
+      <div id="touch-right">
+        <button class="tbtn" id="btn-fly">FLY</button>
+        <div class="row">
+          <button class="tbtn" id="btn-brake" aria-label="brake">&#9660;</button>
+          <button class="tbtn" id="btn-gas" aria-label="accelerate">&#9650;</button>
+        </div>
+      </div>
     </div>
   </div>
 

@@ -102,6 +102,83 @@ html, body {
   font-variant-numeric: tabular-nums;  /* digits all same width = no jitter */
 }
 
+/* Delivered-packages counter inside the score box. */
+#packages {
+  font-size: 12px;
+  color: #9fb8d8;
+  margin-top: 2px;
+}
+
+/* ===== Touch controls (phones/tablets) =====
+   Hidden by default; main.js adds class "touch" to <body> when it
+   detects a touch screen. The buttons just press the same virtual
+   keys the keyboard does. */
+
+#touch-controls { display: none; }
+
+body.touch #touch-controls { display: block; }
+body.touch #help { display: none; }          /* keyboard hints are useless here */
+body.touch #readouts {                        /* make room for the buttons */
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tbtn {
+  pointer-events: auto;        /* the HUD ignores clicks; buttons must not */
+  touch-action: none;          /* stop the browser stealing the gesture */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none; /* no long-press menu on iOS */
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid rgba(120, 200, 255, 0.5);
+  background: rgba(10, 18, 32, 0.6);
+  color: #e8f0ff;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.tbtn:active {
+  background: rgba(125, 249, 255, 0.35);
+}
+
+#touch-left {
+  position: absolute;
+  bottom: 26px;
+  left: 18px;
+  display: flex;
+  gap: 14px;
+}
+
+#touch-right {
+  position: absolute;
+  bottom: 26px;
+  right: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+#touch-right .row { display: flex; gap: 14px; }
+
+#btn-fly {
+  width: 78px;
+  height: 78px;
+  font-size: 16px;
+  letter-spacing: 1px;
+  border-color: rgba(125, 249, 255, 0.8);
+}
+
+/* Tighten the HUD on narrow screens so the top bar fits. */
+@media (max-width: 560px) {
+  .panel { padding: 6px 9px; }
+  #score, #target { font-size: 15px; }
+  #message { font-size: 24px; }
+  #start-card { padding: 22px 24px; margin: 0 12px; }
+}
+
 /* Controls reminder, bottom-center. */
 #help {
   position: absolute;

@@ -15,6 +15,9 @@ solid until you climb above their roofs — and yes, you can land on them.
 | `S` / `↓`      | Brake / reverse         |
 | `A` `D` / `←` `→` | Steer                |
 | `SPACE` (hold) | Upward thrust — fly!    |
+| `R`            | Reset back to the start |
+
+On phones and tablets, on-screen touch buttons appear automatically.
 
 ## Run it locally
 

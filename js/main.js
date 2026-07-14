@@ -128,6 +128,7 @@ const prev = { lng: car.lng, lat: car.lat, alt: car.alt };
 const state = {
   running: false,       // false until the player clicks START
   score: 0,
+  deliveries: 0,        // how many packages delivered so far
   targetIndex: 0,       // which BEACONS entry we're delivering to
   camHeading: START.heading, // camera direction (lags behind the car)
 };
@@ -168,6 +169,51 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
   const action = KEYMAP[e.code];
   if (action) keys[action] = false;
+});
+
+// --- Touch controls ---
+// Phones have no keyboard, so we show on-screen buttons that press the
+// SAME virtual keys. The physics code never knows the difference —
+// keeping input in one place is what makes that possible.
+
+// "Pointer" events cover mouse, finger and pen with one API.
+function bindHoldButton(id, action) {
+  const el = document.getElementById(id);
+  const press = (e) => { e.preventDefault(); keys[action] = true; };
+  const release = (e) => { e.preventDefault(); keys[action] = false; };
+  el.addEventListener('pointerdown', press);
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+bindHoldButton('btn-left', 'left');
+bindHoldButton('btn-right', 'right');
+bindHoldButton('btn-gas', 'forward');
+bindHoldButton('btn-brake', 'back');
+bindHoldButton('btn-fly', 'thrust');
+
+// Only show the buttons on devices that actually have a touch screen.
+if (navigator.maxTouchPoints > 0) {
+  document.body.classList.add('touch');
+}
+
+// --- Reset key ---
+// Stranded in the bay? Press R to teleport back to the start.
+function resetCar() {
+  car.lng = START.lngLat[0];
+  car.lat = START.lngLat[1];
+  car.alt = 0;
+  car.heading = START.heading;
+  car.vx = 0;
+  car.vy = 0;
+  car.vAlt = 0;
+  state.camHeading = START.heading;
+  flashMessage('BACK TO START', 1200);
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyR' && state.running) resetCar();
 });
 
 // If the player switches tabs mid-flight, release all keys so the car
@@ -642,6 +688,7 @@ function checkDelivery() {
 
   if (dist < GAME.DELIVERY_RADIUS && car.alt < 300) {
     state.score += GAME.POINTS;
+    state.deliveries += 1;
     flashMessage(`DELIVERED! +${GAME.POINTS}`, 1800);
     // "% BEACONS.length" wraps back to 0 after the last one — the
     // delivery route loops forever.
@@ -688,6 +735,7 @@ function updateChaseCamera(dt) {
 // Grab the HTML elements once — searching the page every frame is slow.
 const hud = {
   score: document.getElementById('score'),
+  packages: document.getElementById('packages'),
   target: document.getElementById('target'),
   arrow: document.getElementById('compass-arrow'),
   distance: document.getElementById('distance'),
@@ -708,6 +756,7 @@ function updateHUD() {
   const target = BEACONS[state.targetIndex];
 
   hud.score.textContent = state.score;
+  hud.packages.textContent = `\u{1F4E6} ${state.deliveries}`;
   hud.target.textContent = target.name;
 
   // Compass arrow: angle to the target, relative to where the camera
