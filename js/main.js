@@ -23,7 +23,7 @@ import * as THREE from 'three';
 // what makes "the new button does nothing" bugs happen.)
 const V = new URL(import.meta.url).search;
 const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
-        SATELLITE, BUILDING_COLORS, BUSH_MULT } =
+        SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC } =
   await import('./config.js' + V);
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
@@ -166,8 +166,10 @@ function initGame() {
     // Also drop the flat "bridge" road lines: the map draped them on the
     // terrain at sea level, so they floated on the water beneath our real
     // 3D bridge decks. Our decks replace them.
+    // Also drop road route shields (the little "80" markers) — they were
+    // floating on the water and are clutter in a flying game.
     if (layer.id.startsWith('poi') || layer.id.includes('housenumber')
-        || layer.id.includes('bridge')) {
+        || layer.id.includes('bridge') || layer.id.includes('shield')) {
       map.removeLayer(layer.id);
     }
   }
@@ -321,6 +323,9 @@ const state = {
   zoomNudge: 0,         // extra zoom from the mouse wheel, -1..1
   vehicle: 0,           // which VEHICLES entry we're driving
   satellite: SATELLITE.ON_AT_START, // aerial photo base vs drawn map
+  health: GAME.MAX_HEALTH, // hearts left
+  invulnUntil: 0,       // timestamp (ms) until which crashes don't hurt
+  gameOver: false,
 };
 
 // The ACTIVE physics numbers: the defaults, with the current vehicle's
@@ -549,6 +554,7 @@ function applyVehicleVisibility() {
   const modelName = VEHICLES[state.vehicle].model;
   if (three.carModel) three.carModel.visible = modelName === 'car';
   if (three.ufoModel) three.ufoModel.visible = modelName === 'ufo';
+  if (three.scooterModel) three.scooterModel.visible = modelName === 'scooter';
 }
 
 function switchVehicle() {
@@ -597,8 +603,12 @@ function resetCar() {
 }
 
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyR' && state.running) resetCar();
+  if (e.code !== 'KeyR') return;
+  if (state.gameOver) restartGame();     // R also revives you after a crash
+  else if (state.running) resetCar();
 });
+
+document.getElementById('restart-button').addEventListener('click', restartGame);
 
 // If the player switches tabs mid-flight, release all keys so the car
 // doesn't fly away on its own. (Without this, the browser never tells
@@ -765,6 +775,61 @@ function buildUfoModel() {
   ufo.add(glow);
 
   return { ufo, rim, glow };
+}
+
+// A kick-scooter with a little rider — for the 3rd-person delivery view.
+// Front of the vehicle is -Z (same as the car), so it faces forward.
+function buildScooterModel() {
+  const scooter = new THREE.Group();
+  const frame = new THREE.MeshLambertMaterial({ color: 0xff5a3c });
+  const dark = new THREE.MeshLambertMaterial({ color: 0x1c1c1c });
+  const skin = new THREE.MeshLambertMaterial({ color: 0xe0a878 });
+  const shirt = new THREE.MeshLambertMaterial({ color: 0x2f6fd0 });
+
+  // Deck (you stand on this) and the two wheels.
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.14, 2.4), frame);
+  deck.position.y = 0.4;
+  scooter.add(deck);
+  const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.2, 14);
+  for (const z of [-1.05, 1.05]) {
+    const w = new THREE.Mesh(wheelGeo, dark);
+    w.rotation.z = Math.PI / 2;      // stand the cylinder up like a wheel
+    w.position.set(0, 0.36, z);
+    scooter.add(w);
+  }
+
+  // Steering column + handlebar at the front (-Z).
+  const column = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.3, 0.12), frame);
+  column.position.set(0, 1.05, -1.05);
+  scooter.add(column);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.12, 0.12), dark);
+  bar.position.set(0, 1.6, -1.05);
+  scooter.add(bar);
+
+  // The rider: legs, torso, head, helmet.
+  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.9, 0.45), dark);
+  legs.position.set(0, 1.0, 0.25);
+  scooter.add(legs);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.85, 0.4), shirt);
+  torso.position.set(0, 1.75, 0.15);
+  scooter.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 12), skin);
+  head.position.set(0, 2.35, 0.1);
+  scooter.add(head);
+  const helmet = new THREE.Mesh(
+    new THREE.SphereGeometry(0.34, 14, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    frame,
+  );
+  helmet.position.set(0, 2.4, 0.1);
+  scooter.add(helmet);
+  // A delivery box on the back rack.
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.6, 0.6),
+    new THREE.MeshLambertMaterial({ color: 0xcaa46a }));
+  box.position.set(0, 1.15, 1.15);
+  scooter.add(box);
+
+  scooter.scale.setScalar(1.15);
+  return scooter;
 }
 
 // The delivery beacon: a tall glowing pillar of light you can see from
@@ -1027,11 +1092,15 @@ function buildBushes() {
 // It shares the map's depth buffer, so LAND (terrain above 0) hides it
 // while WATER (sea floor below 0) shows it through as blue. Diving below
 // it puts you underwater. It follows the car so it always fills the view.
+const WATER_LEVEL = -5; // metres below sea level the water sheet sits at
+
 function buildWater() {
   const water = new THREE.Mesh(
     new THREE.PlaneGeometry(80000, 80000),
     new THREE.MeshBasicMaterial({
-      color: 0x1f6a90, transparent: true, opacity: 0.62,
+      // Fairly opaque so you don't see roads/terrain sitting on the sea
+      // floor through the water from above; still reads as water.
+      color: 0x1f6a90, transparent: true, opacity: 0.8,
       side: THREE.DoubleSide, depthWrite: false,
     }),
   );
@@ -1039,6 +1108,86 @@ function buildWater() {
   water.renderOrder = -1;          // draw beneath the other scene objects
   three.water = water;
   return water;
+}
+
+// --- Street traffic ---
+// A pool of little cars that drive along the REAL roads near you. We ask
+// MapLibre for road shapes in view, then walk each car along one.
+const traffic = { cars: [], roads: [], lastRoadRefresh: -Infinity };
+
+function buildTraffic() {
+  const group = new THREE.Group();
+  const body = new THREE.BoxGeometry(2, 1.2, 4.3);
+  for (let i = 0; i < TRAFFIC.COUNT; i++) {
+    const color = TRAFFIC.COLORS[i % TRAFFIC.COLORS.length];
+    const mesh = new THREE.Mesh(body, new THREE.MeshLambertMaterial({ color }));
+    mesh.visible = false;
+    group.add(mesh);
+    traffic.cars.push({ mesh, road: null, seg: 0, segT: 0 });
+  }
+  three.trafficGroup = group;
+  return group;
+}
+
+// Grab road centrelines from the vector tiles currently in view.
+function refreshTrafficRoads(nowMs) {
+  if (nowMs - traffic.lastRoadRefresh < 3000 || !buildingSourceId) return;
+  traffic.lastRoadRefresh = nowMs;
+  const drivable = new Set(['motorway', 'trunk', 'primary', 'secondary',
+    'tertiary', 'minor', 'street', 'residential', 'service',
+    'motorway_link', 'trunk_link', 'primary_link']);
+  const roads = [];
+  for (const f of map.querySourceFeatures(buildingSourceId, { sourceLayer: 'transportation' })) {
+    if (f.geometry.type !== 'LineString') continue;
+    if (!drivable.has(f.properties.class)) continue;
+    if (f.geometry.coordinates.length >= 2) roads.push(f.geometry.coordinates);
+    if (roads.length >= 600) break;
+  }
+  if (roads.length) traffic.roads = roads;
+}
+
+// Put a car on a random nearby road, ready to drive from its start.
+function placeCarOnRoad(c) {
+  if (!traffic.roads.length) { c.mesh.visible = false; c.road = null; return; }
+  c.road = traffic.roads[Math.floor(Math.random() * traffic.roads.length)];
+  c.seg = 0;
+  c.segT = Math.random(); // start somewhere along it
+}
+
+function updateTraffic(dt, nowMs) {
+  if (!three.trafficGroup) return;
+  refreshTrafficRoads(nowMs);
+
+  for (const c of traffic.cars) {
+    if (!c.road) { placeCarOnRoad(c); continue; }
+
+    // Walk `SPEED*dt` metres along the polyline, hopping segments.
+    let remaining = TRAFFIC.SPEED * dt;
+    while (remaining > 0 && c.seg < c.road.length - 1) {
+      const a = c.road[c.seg], b = c.road[c.seg + 1];
+      const segLen = metersBetween(a[0], a[1], b[0], b[1]) || 0.001;
+      const toEnd = segLen * (1 - c.segT);
+      if (remaining < toEnd) { c.segT += remaining / segLen; remaining = 0; }
+      else { remaining -= toEnd; c.seg++; c.segT = 0; }
+    }
+    if (c.seg >= c.road.length - 1) { c.road = null; c.mesh.visible = false; continue; }
+
+    // Current lng/lat on the road, and the heading toward the next point.
+    const a = c.road[c.seg], b = c.road[c.seg + 1];
+    const lng = a[0] + (b[0] - a[0]) * c.segT;
+    const lat = a[1] + (b[1] - a[1]) * c.segT;
+
+    // Cars far from the player get recycled onto a nearby road.
+    if (metersBetween(lng, lat, car.lng, car.lat) > 1400) { c.road = null; c.mesh.visible = false; continue; }
+
+    const ground = groundAt(lng, lat, 0);
+    const p = toScene(lng, lat, Math.max(0, ground) + 1);
+    c.mesh.position.copy(p);
+    const dx = (b[0] - a[0]) * Math.cos(lat * DEG);
+    const dy = b[1] - a[1];
+    c.mesh.rotation.y = -Math.atan2(dx, dy); // face along the road
+    c.mesh.visible = true;
+  }
 }
 
 // This object is MapLibre's "custom layer" — it has two jobs:
@@ -1078,12 +1227,17 @@ const gameLayer = {
     three.carModel = carModel;
     three.scene.add(carGroup);
 
-    // The UFO rides in the same tilt group; only one model is visible.
+    // The UFO and scooter ride in the same tilt group; only one shows.
     const { ufo, rim, glow } = buildUfoModel();
     three.ufoModel = ufo;
     three.ufoRim = rim;
     three.ufoGlow = glow;
     carBody.add(ufo);
+
+    const scooter = buildScooterModel();
+    three.scooterModel = scooter;
+    carBody.add(scooter);
+
     applyVehicleVisibility();
 
     const { beaconGroup, beamMaterial, ring } = buildBeacon();
@@ -1098,6 +1252,7 @@ const gameLayer = {
     three.scene.add(buildTrees());
     three.scene.add(buildBushes());
     three.scene.add(buildWater());
+    three.scene.add(buildTraffic());
 
     // Fake drop-shadow: a dark circle on the ground under the car.
     // It fades and spreads as you climb — a surprisingly important cue
@@ -1180,9 +1335,12 @@ function updateSceneObjects(timeSeconds) {
   three.shadow.scale.set(spread, spread, 1);
 
   // --- Water surface: keep the big sheet centered under the car ---
+  // Sits a few metres BELOW sea level so low-lying landfill (SoMa reads
+  // as ~0 m in the elevation data) doesn't get flooded blue; the real
+  // bay is far deeper, so it's still covered.
   if (three.water) {
     const w = toScene(car.lng, car.lat, 0);
-    three.water.position.set(w.x, 0, w.z);
+    three.water.position.set(w.x, WATER_LEVEL, w.z);
   }
 
   // --- Beacon at the current target, standing on its terrain ---
@@ -1409,8 +1567,43 @@ function checkCollisions(nowMs) {
     car.lat = prev.lat;
     car.vx *= -0.3;
     car.vy *= -0.3;
-    flashMessage('BONK!', 700);
+    takeDamage(nowMs);
   }
+}
+
+// Lose a heart on a crash — but only once per INVULN_MS, so a single
+// scrape along a wall doesn't wipe out all your health in a few frames.
+function takeDamage(nowMs) {
+  if (nowMs < state.invulnUntil) { flashMessage('BONK!', 500); return; }
+  state.invulnUntil = nowMs + GAME.INVULN_MS;
+  state.health -= 1;
+  if (state.health <= 0) {
+    state.health = 0;
+    endGame();
+  } else {
+    flashMessage(`BONK!  -1 ❤  (${state.health} left)`, 1100);
+  }
+}
+
+// Out of hearts: freeze the game and show the Game Over card.
+function endGame() {
+  state.gameOver = true;
+  state.running = false;
+  document.getElementById('final-score').textContent = state.score;
+  document.getElementById('gameover').classList.add('show');
+}
+
+// Start fresh: full health, back to the spawn point, score reset.
+function restartGame() {
+  state.health = GAME.MAX_HEALTH;
+  state.score = 0;
+  state.deliveries = 0;
+  state.targetIndex = 0;
+  state.invulnUntil = 0;
+  state.gameOver = false;
+  resetCar();
+  document.getElementById('gameover').classList.remove('show');
+  state.running = true;
 }
 
 
@@ -1498,6 +1691,7 @@ function updateChaseCamera(dt) {
 const hud = {
   score: document.getElementById('score'),
   packages: document.getElementById('packages'),
+  hearts: document.getElementById('hearts'),
   target: document.getElementById('target'),
   arrow: document.getElementById('compass-arrow'),
   distance: document.getElementById('distance'),
@@ -1522,6 +1716,9 @@ function updateHUD() {
 
   hud.score.textContent = state.score;
   hud.packages.textContent = `\u{1F4E6} ${state.deliveries}`;
+  // Full hearts for health left, empty hearts for health lost.
+  hud.hearts.textContent =
+    '❤'.repeat(state.health) + '\u{1F90D}'.repeat(GAME.MAX_HEALTH - state.health);
   hud.target.textContent = target.name;
 
   // Compass arrow: angle to the target, relative to where the camera
@@ -1575,6 +1772,7 @@ function tick(now) {
   updatePhysics(dt);
   checkCollisions(now);
   checkDelivery();
+  updateTraffic(dt, now);
   updateChaseCamera(dt);
   updateHUD();
 }

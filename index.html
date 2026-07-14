@@ -30,7 +30,7 @@
        time we deploy, and browsers are forced to load the fresh files
        instead of stale saved copies. This one number covers main.js,
        config.js (main.js passes it along), and style.css. -->
-  <link rel="stylesheet" href="style.css?v=14">
+  <link rel="stylesheet" href="style.css?v=15">
 </head>
 <body>
 
@@ -46,6 +46,7 @@
       <div class="panel" id="score-box">
         SCORE <span id="score">0</span>
         <div id="packages">&#128230; 0</div>
+        <div id="hearts">&#10084;&#10084;&#10084;</div>
       </div>
       <div class="panel" id="compass">
         <!-- This arrow is rotated by JavaScript to point at the target -->
@@ -110,8 +111,18 @@
     </div>
   </div>
 
+  <!-- Game Over card, shown when your hearts run out. -->
+  <div id="gameover">
+    <div id="gameover-card">
+      <h1>GAME&nbsp;OVER</h1>
+      <p>You ran out of hearts.</p>
+      <p class="big">Final score: <span id="final-score">0</span></p>
+      <button id="restart-button">TRY AGAIN</button>
+    </div>
+  </div>
+
   <!-- Our game code. type="module" lets us use modern `import` statements.
        The ?v= must match the number on the stylesheet above. -->
-  <script type="module" src="js/main.js?v=14"></script>
+  <script type="module" src="js/main.js?v=15"></script>
 </body>
 </html>

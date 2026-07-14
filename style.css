@@ -125,6 +125,57 @@ html, body {
   margin-top: 2px;
 }
 
+/* Hearts (health) inside the score box. */
+#hearts {
+  font-size: 15px;
+  margin-top: 3px;
+  letter-spacing: 2px;
+}
+
+/* Game Over overlay — same look as the start card. */
+#gameover {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 10, 20, 0.6);
+}
+#gameover.show { display: flex; }
+
+#gameover-card {
+  background: rgba(10, 18, 32, 0.94);
+  color: #e8f0ff;
+  border: 1px solid rgba(255, 120, 120, 0.5);
+  border-radius: 16px;
+  padding: 30px 44px;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+#gameover-card h1 {
+  margin: 0 0 10px;
+  letter-spacing: 4px;
+  color: #ff6b6b;
+  text-shadow: 0 0 14px rgba(255, 107, 107, 0.6);
+}
+#gameover-card p { color: #b8c9e2; margin: 6px 0; }
+#gameover-card .big { font-size: 20px; color: #ffd166; margin: 14px 0 20px; }
+
+#restart-button {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 12px 34px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #06121f;
+  background: linear-gradient(#ffd166, #f0a93b);
+  box-shadow: 0 0 18px rgba(255, 209, 102, 0.5);
+}
+#restart-button:hover { filter: brightness(1.08); }
+
 /* ===== Touch controls (phones/tablets) =====
    Hidden by default; main.js adds class "touch" to <body> when it
    detects a touch screen. The buttons just press the same virtual

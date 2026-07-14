@@ -76,6 +76,19 @@ export const VEHICLES = [
     physics: {}, // the PHYSICS defaults above ARE the car
   },
   {
+    name: 'SCOOTER',
+    model: 'scooter',
+    physics: {
+      MAX_SPEED: 34,      // ~76 mph — a zippy delivery scooter
+      ACCEL: 42,
+      BRAKE: 55,
+      TURN_RATE: 2.6,     // nimble
+      THRUST: 34,         // it can still hop/fly, just gently
+      GRAVITY: 26,
+      GRIP_GROUND: 4.5,   // sticks to the road
+    },
+  },
+  {
     name: 'UFO',
     model: 'ufo',
     canDive: true,        // the saucer can descend below sea level
@@ -103,8 +116,8 @@ export const CAMERA = {
   SMOOTH: 4,    // how quickly the camera swings around when you turn.
                 // Bigger = snappier, smaller = lazier.
   MODES: [
+    { name: '3RD PERSON', zoom: 18.9, pitch: 60 }, // close behind, over the shoulder
     { name: 'CHASE',    zoom: 17.3, pitch: 72 },  // the classic
-    { name: 'CLOSE',    zoom: 17.9, pitch: 68 },  // right on the bumper
     { name: 'SKY VIEW', zoom: 16.4, pitch: 55 },  // high + wide, for navigating
     { name: 'TOP-DOWN', zoom: 16.6, pitch: 15 },  // like the paper map
     { name: 'CINEMA',   zoom: 17.6, pitch: 78 },  // low drama, big horizon
@@ -115,6 +128,17 @@ export const GAME = {
   DELIVERY_RADIUS: 45, // how close (meters) you must get to score
   POINTS: 100,         // points per delivery
   CAR_SCALE: 1.8,      // 1 = realistic car size; bigger is easier to see
+  MAX_HEALTH: 3,       // hearts you start with
+  INVULN_MS: 1400,     // after a crash, you can't be hurt again for this long
+                       // (so one bonk doesn't drain every heart at once)
+};
+
+// Street traffic: a pool of little cars that drive along the REAL roads
+// near you. Purely scenery — you pass through them (for now!).
+export const TRAFFIC = {
+  COUNT: 24,           // how many cars exist at once
+  SPEED: 12,           // meters/second (~27 mph)
+  COLORS: [0xffffff, 0x222831, 0xc0392b, 0x2e86de, 0xf1c40f, 0x7f8c8d, 0x27ae60],
 };
 
 // Satellite imagery base. Free ESRI "World Imagery" tiles (no API key)

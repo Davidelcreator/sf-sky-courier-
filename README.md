@@ -17,7 +17,7 @@ solid until you climb above their roofs — and yes, you can land on them.
 | `SPACE` (hold) | Upward thrust — fly!    |
 | `G`            | Toggle HOVER / GLIDE flight |
 | `C`            | Cycle camera angle (chase, close, sky, top-down, cinema) |
-| `V`            | Switch vehicle (sky car / UFO — ~940 mph, can dive underwater) |
+| `V`            | Switch vehicle: sky car / scooter (3rd-person) / UFO (dives) |
 | drag / swipe   | Look around (orbit the camera) |
 | `B`            | Toggle satellite imagery / drawn map |
 | mouse wheel    | Zoom the camera in/out  |
@@ -26,6 +26,10 @@ solid until you climb above their roofs — and yes, you can land on them.
 In **GLIDE** mode your forward speed generates lift, so at full speed
 you sail nearly flat across the city; slow down and you sink. **HOVER**
 is the default: gravity always pulls, thrust fights it.
+
+You have **3 hearts** — each crash into a building costs one. Lose them
+all and it's game over (press **R** or "Try Again" to restart). Little
+cars drive the real streets as traffic.
 
 On phones and tablets, on-screen controls appear automatically: a
 joystick on the left (push to steer, and up/down to accelerate/brake)
