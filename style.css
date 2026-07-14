@@ -143,25 +143,53 @@ body.touch #readouts {                        /* make room for the buttons */
   background: rgba(125, 249, 255, 0.35);
 }
 
-#touch-left {
+/* Analog joystick (left thumb). */
+#joystick {
   position: absolute;
-  bottom: 26px;
-  left: 18px;
-  display: flex;
-  gap: 14px;
+  bottom: 30px;
+  left: 24px;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  border: 2px solid rgba(120, 200, 255, 0.5);
+  background: rgba(10, 18, 32, 0.5);
+  pointer-events: auto;   /* the HUD ignores clicks; the stick must not */
+  touch-action: none;     /* stop the browser scrolling/zooming on drag */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Faint crosshair hinting the two axes (steer = across, gas = up/down). */
+#joystick::before,
+#joystick::after {
+  content: '';
+  position: absolute;
+  background: rgba(120, 200, 255, 0.18);
+}
+#joystick::before { left: 50%; top: 12%; width: 2px; height: 76%; transform: translateX(-1px); }
+#joystick::after  { top: 50%; left: 12%; height: 2px; width: 76%; transform: translateY(-1px); }
+
+/* The draggable knob. Its translate() is set from JavaScript. */
+#joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62px;
+  height: 62px;
+  margin-left: -31px;     /* center the knob on the ring's middle */
+  margin-top: -31px;
+  border-radius: 50%;
+  background: rgba(125, 249, 255, 0.55);
+  border: 1px solid rgba(125, 249, 255, 0.9);
+  box-shadow: 0 0 14px rgba(125, 249, 255, 0.5);
 }
 
 #touch-right {
   position: absolute;
-  bottom: 26px;
-  right: 18px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 14px;
+  bottom: 30px;
+  right: 24px;
 }
-
-#touch-right .row { display: flex; gap: 14px; }
 
 #btn-fly {
   width: 78px;

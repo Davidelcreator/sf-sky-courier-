@@ -148,6 +148,22 @@ window.game = { car, state, keys: null, map };
 const keys = { forward: false, back: false, left: false, right: false, thrust: false };
 window.game.keys = keys;
 
+// Analog joystick position (touch screens). Each axis runs -1..1;
+// 0 = centered. x = steering (right positive), y = throttle (up/forward
+// positive). The keyboard sets full-tilt values instead.
+const joystick = { x: 0, y: 0 };
+
+// The COMBINED control input, recomputed each physics step from
+// keyboard + joystick. steer/throttle are -1..1. Keeping the final
+// input in one object lets both the physics and the car's cosmetic
+// tilt read the exact same numbers.
+const input = { steer: 0, throttle: 0 };
+window.game.joystick = joystick;
+window.game.input = input;
+// Debug hook: lets you single-step the physics from the console, e.g.
+// `game.step(0.1)` advances the world 0.1s. (The game normally calls
+// this ~60×/sec for you.) Assigned once updatePhysics exists, below.
+
 // Maps physical keys to game actions. e.code names the physical key,
 // so this works even on non-QWERTY keyboards.
 const KEYMAP = {
@@ -172,11 +188,12 @@ window.addEventListener('keyup', (e) => {
 });
 
 // --- Touch controls ---
-// Phones have no keyboard, so we show on-screen buttons that press the
-// SAME virtual keys. The physics code never knows the difference —
-// keeping input in one place is what makes that possible.
+// Phones have no keyboard. The FLY button and the joystick both feed
+// the SAME inputs the keyboard does, so the physics code never has to
+// know which device you used.
 
-// "Pointer" events cover mouse, finger and pen with one API.
+// A "hold button": true while pressed, false when released. "Pointer"
+// events cover mouse, finger and pen with one unified API.
 function bindHoldButton(id, action) {
   const el = document.getElementById(id);
   const press = (e) => { e.preventDefault(); keys[action] = true; };
@@ -187,13 +204,61 @@ function bindHoldButton(id, action) {
   el.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
-bindHoldButton('btn-left', 'left');
-bindHoldButton('btn-right', 'right');
-bindHoldButton('btn-gas', 'forward');
-bindHoldButton('btn-brake', 'back');
 bindHoldButton('btn-fly', 'thrust');
 
-// Only show the buttons on devices that actually have a touch screen.
+// The analog joystick. We track one finger from where it presses the
+// ring, follow it as it drags (even outside the ring), and turn its
+// offset from center into two -1..1 values. setPointerCapture keeps the
+// drag glued to this element even when the finger slides past its edge.
+function setupJoystick() {
+  const base = document.getElementById('joystick');
+  const knob = document.getElementById('joystick-knob');
+  const MAX = 46;      // how far (pixels) the knob can travel from center
+  const DEAD = 0.16;   // ignore tiny wobbles near the middle (a "dead zone")
+  let pointerId = null;
+
+  // Past the dead zone, rescale so the remaining travel still reaches a
+  // full 1.0 — otherwise you could never quite hit max steering/speed.
+  const withDeadzone = (v) => {
+    if (Math.abs(v) < DEAD) return 0;
+    return (v - Math.sign(v) * DEAD) / (1 - DEAD);
+  };
+
+  const moveTo = (e) => {
+    const r = base.getBoundingClientRect();
+    let dx = e.clientX - (r.left + r.width / 2);
+    let dy = e.clientY - (r.top + r.height / 2);
+    // Keep the knob inside the ring.
+    const dist = Math.hypot(dx, dy);
+    if (dist > MAX) { dx = (dx / dist) * MAX; dy = (dy / dist) * MAX; }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    joystick.x = withDeadzone(dx / MAX);
+    joystick.y = withDeadzone(-dy / MAX); // screen y grows downward; flip it
+  };
+
+  const end = (e) => {
+    if (e.pointerId !== pointerId) return;
+    pointerId = null;
+    joystick.x = 0;
+    joystick.y = 0;
+    knob.style.transform = 'translate(0px, 0px)'; // snap knob home
+  };
+
+  base.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    pointerId = e.pointerId;
+    base.setPointerCapture(e.pointerId);
+    moveTo(e);
+  });
+  base.addEventListener('pointermove', (e) => {
+    if (e.pointerId === pointerId) moveTo(e);
+  });
+  base.addEventListener('pointerup', end);
+  base.addEventListener('pointercancel', end);
+}
+setupJoystick();
+
+// Only show the touch controls on devices that actually have a touch screen.
 if (navigator.maxTouchPoints > 0) {
   document.body.classList.add('touch');
 }
@@ -226,6 +291,8 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('blur', () => {
   if (window.game.noBlurReset) return;
   for (const k of Object.keys(keys)) keys[k] = false;
+  joystick.x = 0;
+  joystick.y = 0;
 });
 
 
@@ -466,8 +533,7 @@ function updateSceneObjects(timeSeconds) {
   // --- Cosmetic tilt (juice!) ---
   // Nose up when climbing, down when falling; bank into turns.
   const targetPitch = Math.max(-0.35, Math.min(0.35, car.vAlt * 0.02));
-  const steer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-  const targetRoll = -steer * 0.3;
+  const targetRoll = -input.steer * 0.3; // bank into the turn
   // Ease 15% of the way there each frame = smooth, not snappy.
   three.carBody.rotation.x += (targetPitch - three.carBody.rotation.x) * 0.15;
   three.carBody.rotation.z += (targetRoll - three.carBody.rotation.z) * 0.15;
@@ -505,25 +571,30 @@ function updatePhysics(dt) {
   prev.lat = car.lat;
   prev.alt = car.alt;
 
+  // --- Combine the two input sources into one -1..1 value per axis ---
+  // Keyboard keys give a full -1 or +1; the joystick adds its analog
+  // amount. clamp() keeps the total within -1..1 if you use both at once.
+  const clamp1 = (v) => Math.max(-1, Math.min(1, v));
+  input.steer = clamp1((keys.right ? 1 : 0) - (keys.left ? 1 : 0) + joystick.x);
+  input.throttle = clamp1((keys.forward ? 1 : 0) - (keys.back ? 1 : 0) + joystick.y);
+
   // --- Steering ---
-  const steer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
   const horizSpeed = Math.hypot(car.vx, car.vy);
   // A real car barely turns when crawling; scale turning with speed
   // (but keep some, so you can rotate while hovering).
   const turnFactor = 0.35 + 0.65 * Math.min(1, horizSpeed / 15);
-  car.heading += steer * PHYSICS.TURN_RATE * turnFactor * dt;
+  car.heading += input.steer * PHYSICS.TURN_RATE * turnFactor * dt;
 
   // --- Thrust forward/backward along our heading ---
   // sin/cos convert "compass angle" into an east/north direction vector.
   const fwdE = Math.sin(car.heading); // east component of "forward"
   const fwdN = Math.cos(car.heading); // north component of "forward"
-  if (keys.forward) {
-    car.vx += fwdE * PHYSICS.ACCEL * dt;
-    car.vy += fwdN * PHYSICS.ACCEL * dt;
-  }
-  if (keys.back) {
-    car.vx -= fwdE * PHYSICS.BRAKE * dt;
-    car.vy -= fwdN * PHYSICS.BRAKE * dt;
+  // One line handles both: a positive throttle accelerates, a negative
+  // one (joystick pulled back, or S held) brakes/reverses.
+  if (input.throttle !== 0) {
+    const power = input.throttle > 0 ? PHYSICS.ACCEL : PHYSICS.BRAKE;
+    car.vx += fwdE * power * input.throttle * dt;
+    car.vy += fwdN * power * input.throttle * dt;
   }
 
   // --- Drag & grip ---
@@ -563,6 +634,9 @@ function updatePhysics(dt) {
   car.lng += (car.vx * dt) / metersPerDegLng;
   car.lat += (car.vy * dt) / METERS_PER_DEG_LAT;
 }
+
+// Expose the physics step for console debugging (see note near game.input).
+window.game.step = updatePhysics;
 
 
 // ============================================================

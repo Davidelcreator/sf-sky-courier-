@@ -67,16 +67,14 @@
     <!-- On-screen controls for phones/tablets. Hidden on desktop;
          JavaScript reveals them when it detects a touch screen. -->
     <div id="touch-controls">
-      <div id="touch-left">
-        <button class="tbtn" id="btn-left" aria-label="steer left">&#9664;</button>
-        <button class="tbtn" id="btn-right" aria-label="steer right">&#9654;</button>
+      <!-- Left: analog joystick. Drag the knob left/right to steer and
+           up/down to accelerate/brake. The knob is moved by JavaScript. -->
+      <div id="joystick">
+        <div id="joystick-knob"></div>
       </div>
+      <!-- Right: hold to fly. -->
       <div id="touch-right">
         <button class="tbtn" id="btn-fly">FLY</button>
-        <div class="row">
-          <button class="tbtn" id="btn-brake" aria-label="brake">&#9660;</button>
-          <button class="tbtn" id="btn-gas" aria-label="accelerate">&#9650;</button>
-        </div>
       </div>
     </div>
   </div>

@@ -17,7 +17,9 @@ solid until you climb above their roofs — and yes, you can land on them.
 | `SPACE` (hold) | Upward thrust — fly!    |
 | `R`            | Reset back to the start |
 
-On phones and tablets, on-screen touch buttons appear automatically.
+On phones and tablets, on-screen controls appear automatically: a
+joystick on the left (push to steer, and up/down to accelerate/brake)
+and a **FLY** button on the right.
 
 ## Run it locally
 
