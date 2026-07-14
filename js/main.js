@@ -14,7 +14,16 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES } from './config.js';
+
+// Load config with the SAME cache-busting version this file was loaded
+// with (e.g. "?v=10" from index.html). That way bumping the number in
+// ONE place — index.html — forces the browser to fetch fresh copies of
+// BOTH main.js and config.js, so an update can never leave you running a
+// stale half of the game. (Browsers cache each file separately, which is
+// what makes "the new button does nothing" bugs happen.)
+const V = new URL(import.meta.url).search;
+const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES } =
+  await import('./config.js' + V);
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
 const maplibregl = window.maplibregl;
