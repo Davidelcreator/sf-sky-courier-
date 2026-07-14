@@ -14,6 +14,10 @@
 // ============================================================
 
 import * as THREE from 'three';
+// GLTFLoader reads .glb 3D-model files. It's a three.js "addon" (not in the
+// core), so we import it straight from the CDN; it resolves `three` via the
+// import map in index.html.
+import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
 
 // Load config with the SAME cache-busting version this file was loaded
 // with (e.g. "?v=10" from index.html). That way bumping the number in
@@ -872,6 +876,54 @@ function buildScooterModel() {
   return scooter;
 }
 
+// --- Real 3D models (glTF) ---
+// Load a .glb, normalize it (scale to a target length, sit it on the
+// ground, face it forward = -Z), then swap it in for the placeholder box
+// model. If the file ever fails to load, we simply keep the placeholder,
+// so a bad download can never break the game.
+const gltfLoader = new GLTFLoader();
+
+function loadVehicleModel(url, targetGroup, opts) {
+  gltfLoader.load(url, (gltf) => {
+    const model = gltf.scene;
+    model.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+
+    // Normalize size + position from the model's bounding box.
+    const box = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3(); box.getSize(size);
+    const center = new THREE.Vector3(); box.getCenter(center);
+    const s = opts.length / (Math.max(size.x, size.z) || 1);
+    model.scale.setScalar(s);
+    // Re-center on x/z and drop so the base sits at y = 0.
+    model.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+
+    // Wrap so we can spin it to face forward without disturbing the fit.
+    const wrap = new THREE.Group();
+    wrap.add(model);
+    wrap.rotation.set(
+      (opts.rotX || 0) * DEG, (opts.rotY || 0) * DEG, (opts.rotZ || 0) * DEG);
+    wrap.position.y = opts.lift || 0;
+
+    // Replace the placeholder meshes with the real model.
+    while (targetGroup.children.length) targetGroup.remove(targetGroup.children[0]);
+    targetGroup.add(wrap);
+    if (opts.onLoaded) opts.onLoaded(wrap);
+  }, undefined, (err) => {
+    console.warn('Could not load model, keeping placeholder:', url, err);
+  });
+}
+
+function loadVehicleModels() {
+  // Car: replace the box car; the glowing thruster pods go away with it.
+  loadVehicleModel('assets/car.glb', three.carModel, {
+    length: 4.4, rotY: 180, onLoaded: () => { three.thrusters = []; },
+  });
+  // Scooter: a Vespa, replacing the hand-built kick-scooter.
+  loadVehicleModel('assets/scooter.glb', three.scooterModel, {
+    length: 2.2, rotY: 180,
+  });
+}
+
 // The delivery beacon: a tall glowing pillar of light you can see from
 // across the city, with a spinning ring at its base.
 function buildBeacon() {
@@ -1429,6 +1481,7 @@ const gameLayer = {
     carBody.add(scooter);
 
     applyVehicleVisibility();
+    loadVehicleModels(); // swap in the real glTF car + scooter when ready
 
     const { beaconGroup, beamMaterial, ring } = buildBeacon();
     three.beaconGroup = beaconGroup;

@@ -71,4 +71,9 @@ coordinates, and add an entry to `BEACONS` — note the order is
 ## Credits
 
 Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright)
-contributors, tiles by [OpenFreeMap](https://openfreemap.org).
+contributors, tiles by [OpenFreeMap](https://openfreemap.org). Satellite
+imagery © Esri. Terrain: Mapzen/AWS Open Data.
+
+3D vehicle models (CC BY 3.0, via [Poly Pizza](https://poly.pizza)):
+- Car by **Quaternius**
+- Vespa scooter by **Jasmine Roberts**
