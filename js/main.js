@@ -369,6 +369,51 @@ window.addEventListener('wheel', (e) => {
   state.zoomNudge = Math.max(-1, Math.min(1, state.zoomNudge - e.deltaY * 0.001));
 }, { passive: true });
 
+// --- Drag / swipe to look around ---
+// Dragging on empty screen (not a button or the steering joystick)
+// orbits the camera: horizontal = look left/right, vertical = tilt.
+// The listeners live on the map layer, which sits UNDER the HUD; touches
+// on controls are caught by those controls (pointer-events: auto) and
+// never reach here, so this only fires on open space — and a separate
+// finger can look while your left thumb keeps steering.
+const look = {
+  active: false, id: null, lastX: 0, lastY: 0,
+  yaw: 0,    // extra bearing (degrees) added to the chase view
+  pitch: 0,  // extra tilt (degrees) added to the chase view
+};
+window.game.look = look;
+
+function setupLookDrag() {
+  const el = document.getElementById('map');
+
+  el.addEventListener('pointerdown', (e) => {
+    look.active = true;
+    look.id = e.pointerId;
+    look.lastX = e.clientX;
+    look.lastY = e.clientY;
+    el.setPointerCapture(e.pointerId); // keep tracking if the finger
+  });                                  // slides over a button mid-drag
+
+  el.addEventListener('pointermove', (e) => {
+    if (!look.active || e.pointerId !== look.id) return;
+    const dx = e.clientX - look.lastX;
+    const dy = e.clientY - look.lastY;
+    look.lastX = e.clientX;
+    look.lastY = e.clientY;
+    // Drag right → look right; drag down → look down at the ground.
+    // (Flip either sign here if it feels backwards to you.)
+    look.yaw = Math.max(-180, Math.min(180, look.yaw + dx * 0.4));
+    look.pitch = Math.max(-45, Math.min(45, look.pitch - dy * 0.3));
+  });
+
+  const end = (e) => {
+    if (e.pointerId === look.id) { look.active = false; look.id = null; }
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+}
+setupLookDrag();
+
 // --- Vehicle switching ---
 // V key (or the VEH button) cycles the garage. Switching swaps both the
 // 3D model and the physics numbers (see VEHICLES in config.js).
@@ -1203,11 +1248,22 @@ function updateChaseCamera(dt) {
   state.camZoom += (mode.zoom + state.zoomNudge - state.camZoom) * ease;
   state.camPitch += (mode.pitch - state.camPitch) * ease;
 
+  // Recenter the drag-look offsets — but only while MOVING. Parked or
+  // hovering, the rate is ~0 so you can hold a view and sightsee; the
+  // faster you fly, the quicker the camera swings back behind you.
+  if (!look.active) {
+    const speed = Math.hypot(car.vx, car.vy);
+    const recenter = Math.exp(-speed * 0.12 * dt);
+    look.yaw *= recenter;
+    look.pitch *= recenter;
+  }
+
   map.jumpTo({
     center: [car.lng, car.lat],
     elevation: car.alt,               // aim at the car's altitude, not the ground
-    bearing: state.camHeading / DEG,  // radians → degrees
-    pitch: state.camPitch,
+    bearing: state.camHeading / DEG + look.yaw, // chase heading + your peek
+    // Total tilt, clamped to MapLibre's valid 0..85° range.
+    pitch: Math.max(0, Math.min(85, state.camPitch + look.pitch)),
     zoom: state.camZoom,
     // Reserving screen space at the top nudges the car toward the
     // bottom third of the screen, so you see the road AHEAD of you.

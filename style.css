@@ -22,6 +22,8 @@ html, body {
   position: absolute;
   inset: 0;               /* shorthand for top/right/bottom/left: 0 */
   background: transparent;
+  touch-action: none;     /* let us handle swipe-to-look without the
+                             browser hijacking the gesture to scroll/zoom */
 }
 
 /* ===== HUD ===== */
