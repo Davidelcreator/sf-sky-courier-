@@ -750,8 +750,11 @@ function buildBridges() {
           tower.add(beam);
         }
         tower.position.set(top.x, 0, top.z);
-        // Towers stand ACROSS the bridge; rotate 90° past the span angle.
-        tower.rotation.y = Math.atan2(along.x, along.z) + Math.PI / 2;
+        // Orient the tower so its legs straddle ACROSS the road. The legs
+        // sit at local ±X, so local Z must run ALONG the bridge — which is
+        // exactly what atan2(along.x, along.z) gives. (An earlier +90° here
+        // turned the legs the wrong way, making towers look misaligned.)
+        tower.rotation.y = Math.atan2(along.x, along.z);
         group.add(tower);
       }
     }
