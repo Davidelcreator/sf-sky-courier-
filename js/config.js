@@ -141,6 +141,34 @@ export const TRAFFIC = {
   COLORS: [0xffffff, 0x222831, 0xc0392b, 0x2e86de, 0xf1c40f, 0x7f8c8d, 0x27ae60],
 };
 
+// ============================================================
+// GRAPHICS QUALITY
+// ============================================================
+// One dial that controls how hard we push the GPU. Each realism feature
+// reads these flags, so weak devices (phones) can skip the costly bits.
+// Cycle in-game with Q or the GFX chip. New quality features get added
+// as flags here.
+export const GRAPHICS = {
+  // Golden-hour "sun" for the whole city (MapLibre 3D light on buildings).
+  // position is [radius, azimuth°, polar°]; polar 78 = sun low in the sky.
+  SUN:   { anchor: 'map', color: '#ffe0b0', intensity: 0.35, position: [1.5, 225, 80] },
+  // Warm hazy atmosphere at the horizon (MapLibre sky). The "fog-*" keys
+  // are haze that thickens with distance — depth cue, not real fog.
+  SKY: {
+    'sky-color': '#4a86d0', 'sky-horizon-blend': 0.5,
+    'horizon-color': '#ffcf92', 'horizon-fog-blend': 0.4,
+    'fog-color': '#f3cb9a', 'fog-ground-blend': 0.5, 'atmosphere-blend': 0.45,
+  },
+  // A plainer sky for Low (skips the pricey distance haze).
+  SKY_PLAIN: { 'sky-color': '#9ec1ea', 'sky-horizon-blend': 0.4, 'horizon-color': '#dfeaf7' },
+
+  PRESETS: {
+    low:    { atmosphere: false, sceneryMult: 0.4, trafficMax: 8,  shadows: false, waterReflect: false },
+    medium: { atmosphere: true,  sceneryMult: 0.8, trafficMax: 16, shadows: false, waterReflect: false },
+    high:   { atmosphere: true,  sceneryMult: 1.0, trafficMax: 24, shadows: true,  waterReflect: true },
+  },
+};
+
 // Satellite imagery base. Free ESRI "World Imagery" tiles (no API key)
 // give real aerial detail — rooftops, trees, water color. Toggle in-game
 // with B (or the MAP button). When on, we hide the flat vector map fills

@@ -23,7 +23,7 @@ import * as THREE from 'three';
 // what makes "the new button does nothing" bugs happen.)
 const V = new URL(import.meta.url).search;
 const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
-        SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC } =
+        SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS } =
   await import('./config.js' + V);
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
@@ -240,6 +240,7 @@ function initGame() {
   );
 
   setBasemap(SATELLITE.ON_AT_START);
+  applyGraphics(); // golden-hour light + sky for the whole city
 }
 
 // 'styledata' fires when the style JSON is parsed (before tiles finish);
@@ -273,6 +274,26 @@ function setBasemap(satelliteOn) {
     }
     hiddenForSatellite = [];
   }
+}
+
+// Apply the current graphics-quality preset. Cheap, live-toggleable bits
+// (the golden-hour light and horizon haze) update immediately; scenery
+// density is baked at load, so it uses the quality that was active then.
+function applyGraphics() {
+  const p = gfx();
+  try { map.setLight(GRAPHICS.SUN); } catch (e) { /* older style */ }
+  try { map.setSky(p.atmosphere ? GRAPHICS.SKY : GRAPHICS.SKY_PLAIN); } catch (e) {}
+  const chip = document.getElementById('gfx');
+  if (chip) chip.textContent = `GFX ${state.quality.toUpperCase()}`;
+}
+
+function cycleQuality() {
+  const order = ['low', 'medium', 'high'];
+  state.quality = order[(order.indexOf(state.quality) + 1) % order.length];
+  localStorage.setItem('gfxQuality', state.quality); // remember for next visit
+  applyGraphics();
+  // Scenery density is baked at load, so hint that a reload applies fully.
+  flashMessage(`GRAPHICS: ${state.quality.toUpperCase()}`, 1300);
 }
 
 // Ground elevation (meters above sea level) at a point. Returns the
@@ -326,7 +347,17 @@ const state = {
   health: GAME.MAX_HEALTH, // hearts left
   invulnUntil: 0,       // timestamp (ms) until which crashes don't hurt
   gameOver: false,
+  // Graphics quality — remembered across visits (localStorage). First
+  // time: phones start on medium, desktops on high.
+  quality: (() => {
+    const saved = localStorage.getItem('gfxQuality');
+    if (saved === 'low' || saved === 'medium' || saved === 'high') return saved;
+    return (navigator.maxTouchPoints > 0 || window.innerWidth < 900) ? 'medium' : 'high';
+  })(),
 };
+
+// Shorthand for the current quality preset's settings.
+function gfx() { return GRAPHICS.PRESETS[state.quality]; }
 
 // The ACTIVE physics numbers: the defaults, with the current vehicle's
 // overrides spread on top. Rebuilt every time you switch vehicles.
@@ -586,6 +617,15 @@ window.addEventListener('keydown', (e) => {
 document.getElementById('btn-map').addEventListener('pointerdown', (e) => {
   e.preventDefault();
   if (state.running) toggleBasemap();
+});
+
+// --- Graphics quality toggle (Q key, or tap the GFX chip) ---
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyQ') cycleQuality();
+});
+document.getElementById('gfx').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  cycleQuality();
 });
 
 // --- Reset key ---
@@ -997,7 +1037,8 @@ function mulberry32(seed) {
 // InstancedMesh draws ALL trunks in one GPU call and all canopies in
 // another — hundreds of trees for the price of two.
 function buildTrees() {
-  const total = TREE_SPOTS.reduce((sum, s) => sum + s.count, 0);
+  const mult = gfx().sceneryMult;
+  const total = Math.ceil(TREE_SPOTS.reduce((sum, s) => sum + s.count, 0) * mult);
 
   const trunks = new THREE.InstancedMesh(
     new THREE.CylinderGeometry(0.3, 0.5, 3, 6),
@@ -1019,7 +1060,8 @@ function buildTrees() {
   for (const spot of TREE_SPOTS) {
     // Each park sits at its own elevation now that hills exist.
     const center = toScene(spot.center[0], spot.center[1], spot.baseAlt ?? 0);
-    for (let n = 0; n < spot.count; n++, i++) {
+    const nTrees = Math.ceil(spot.count * mult);
+    for (let n = 0; n < nTrees && i < total; n++, i++) {
       // Random point in a circle. sqrt() makes the spread even —
       // without it trees would crowd the center.
       const ang = rand() * Math.PI * 2;
@@ -1039,6 +1081,7 @@ function buildTrees() {
       canopies.setColorAt(i, color.setHSL(0.29 + rand() * 0.07, 0.55, 0.28 + rand() * 0.14));
     }
   }
+  trunks.count = i; canopies.count = i; // only render the instances we filled
 
   const group = new THREE.Group();
   group.add(trunks, canopies);
@@ -1049,8 +1092,9 @@ function buildTrees() {
 // blobs sitting on the ground through the same parks, so the greenery
 // reads as full ground cover next to the taller trees.
 function buildBushes() {
-  const total = Math.round(
-    TREE_SPOTS.reduce((sum, s) => sum + s.count, 0) * BUSH_MULT);
+  const mult = BUSH_MULT * gfx().sceneryMult;
+  const total = Math.ceil(
+    TREE_SPOTS.reduce((sum, s) => sum + s.count, 0) * mult);
 
   const bushes = new THREE.InstancedMesh(
     new THREE.IcosahedronGeometry(1.1, 0),  // small + low-poly = cheap
@@ -1067,7 +1111,7 @@ function buildBushes() {
 
   for (const spot of TREE_SPOTS) {
     const center = toScene(spot.center[0], spot.center[1], spot.baseAlt ?? 0);
-    const bushCount = Math.round(spot.count * BUSH_MULT);
+    const bushCount = Math.ceil(spot.count * mult);
     for (let n = 0; n < bushCount && i < total; n++, i++) {
       const ang = rand() * Math.PI * 2;
       const r = spot.radius * Math.sqrt(rand());
@@ -1158,7 +1202,10 @@ function updateTraffic(dt, nowMs) {
   if (!three.trafficGroup) return;
   refreshTrafficRoads(nowMs);
 
-  for (const c of traffic.cars) {
+  const cap = gfx().trafficMax;
+  for (let ci = 0; ci < traffic.cars.length; ci++) {
+    const c = traffic.cars[ci];
+    if (ci >= cap) { c.mesh.visible = false; c.road = null; continue; } // quality cap
     if (!c.road) { placeCarOnRoad(c); continue; }
 
     // Walk `SPEED*dt` metres along the polyline, hopping segments.
@@ -1215,11 +1262,13 @@ const gameLayer = {
     three.camera = new THREE.Camera();
     three.scene = new THREE.Scene();
 
-    // Simple lighting: soft overall light + one "sun" for shading.
-    three.scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
-    sun.position.set(0.5, 1, 0.4);
+    // Golden-hour lighting for our 3D objects (car, trees, bridges), so
+    // they match the warm city: a cool sky-blue fill + a warm low sun.
+    three.scene.add(new THREE.AmbientLight(0xbcd0f0, 0.7));
+    const sun = new THREE.DirectionalLight(0xffe0b0, 1.5);
+    sun.position.set(-0.6, 0.7, 0.35); // low, from the west (sunset side)
     three.scene.add(sun);
+    three.sun = sun;
 
     const { carGroup, carBody, carModel } = buildCar();
     three.carGroup = carGroup;

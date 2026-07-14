@@ -30,7 +30,7 @@
        time we deploy, and browsers are forced to load the fresh files
        instead of stale saved copies. This one number covers main.js,
        config.js (main.js passes it along), and style.css. -->
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
 
@@ -62,6 +62,7 @@
       <span class="panel" id="speed">0 mph</span>
       <span class="panel" id="altitude">0 ft</span>
       <span class="panel" id="flight-mode">&#11014; HOVER</span>
+      <span class="panel" id="gfx">GFX HIGH</span>
     </div>
 
     <!-- Short popup messages like "Delivered! +100" appear here -->
@@ -72,7 +73,8 @@
       A D / &#8592; &#8594; steer &nbsp;&bull;&nbsp; hold SPACE to fly
       &nbsp;&bull;&nbsp; G glide/hover &nbsp;&bull;&nbsp; C camera
       &nbsp;&bull;&nbsp; drag to look &nbsp;&bull;&nbsp; V vehicle
-      &nbsp;&bull;&nbsp; B map/satellite &nbsp;&bull;&nbsp; R reset
+      &nbsp;&bull;&nbsp; B map/satellite &nbsp;&bull;&nbsp; Q graphics
+      &nbsp;&bull;&nbsp; R reset
     </div>
 
     <!-- On-screen controls for phones/tablets. Hidden on desktop;
@@ -123,6 +125,6 @@
 
   <!-- Our game code. type="module" lets us use modern `import` statements.
        The ?v= must match the number on the stylesheet above. -->
-  <script type="module" src="js/main.js?v=15"></script>
+  <script type="module" src="js/main.js?v=16"></script>
 </body>
 </html>

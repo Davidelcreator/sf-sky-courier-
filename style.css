@@ -288,6 +288,13 @@ body.touch #readouts {                        /* make room for the buttons */
   #start-card { padding: 22px 24px; margin: 0 12px; }
 }
 
+/* The GFX chip is tappable (cycles graphics quality). */
+#gfx {
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+}
+
 /* Controls reminder, bottom-center. */
 #help {
   position: absolute;
