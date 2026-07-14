@@ -26,6 +26,20 @@ html, body {
                              browser hijacking the gesture to scroll/zoom */
 }
 
+/* Underwater tint: a blue-green overlay whose opacity JavaScript raises
+   the deeper you dive. pointer-events:none so it never blocks controls. */
+#underwater {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(90, 200, 235, 0.25), transparent 70%),
+    linear-gradient(rgba(10, 90, 130, 0.55), rgba(4, 40, 70, 0.85));
+  transition: opacity 0.25s ease;
+}
+
 /* ===== HUD ===== */
 
 /* The HUD container ignores mouse clicks (pointer-events: none) so the

@@ -54,6 +54,12 @@ const DEG = Math.PI / 180; // multiply degrees by this to get radians
 // with R < 128 is below sea level, and (128, 0, 0) is exactly 0.)
 maplibregl.addProtocol('flatdem', async (params) => {
   const url = params.url.replace('flatdem://', 'https://');
+  // When we're KEEPING the sea floor, hand the tile back untouched so
+  // the real underwater depth survives.
+  if (!TERRAIN.FLATTEN_OCEAN) {
+    const buf = await (await fetch(url)).arrayBuffer();
+    return { data: buf };
+  }
   const blob = await (await fetch(url)).blob();
   const bitmap = await createImageBitmap(blob, {
     premultiplyAlpha: 'none',
@@ -73,6 +79,49 @@ maplibregl.addProtocol('flatdem', async (params) => {
   const out = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   return { data: await out.arrayBuffer() };
 });
+
+// Rotate a hex color's hue by `deg` degrees — used to make several
+// tinted variants of the building palette so neighbours differ.
+function rotateHue(hex, deg) {
+  let r = parseInt(hex.slice(1, 3), 16) / 255;
+  let g = parseInt(hex.slice(3, 5), 16) / 255;
+  let b = parseInt(hex.slice(5, 7), 16) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  let h, s, l = (mx + mn) / 2;
+  if (mx === mn) { h = s = 0; }
+  else {
+    const d = mx - mn;
+    s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h /= 6;
+  }
+  h = (h + deg / 360 + 1) % 1;
+  const k = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t; if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6; return p; };
+  let R, G, B;
+  if (s === 0) { R = G = B = l; }
+  else { const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+    R = k(p, q, h + 1/3); G = k(p, q, h); B = k(p, q, h - 1/3); }
+  const to = (x) => ('0' + Math.round(x * 255).toString(16)).slice(-2);
+  return '#' + to(R) + to(G) + to(B);
+}
+
+// Build the MapLibre color expression for buildings. Each building is
+// sorted into one of 4 "buckets" (from its id + height), and each bucket
+// uses a hue-shifted copy of the BUILDING_COLORS ramp — so the city is
+// colored by height AND neighbouring buildings pick different tints.
+function buildingColorExpression() {
+  const heightInput = ['coalesce', ['get', 'render_height'], 0];
+  const ramp = (pal) => ['interpolate', ['linear'], heightInput, ...pal.flat()];
+  const shift = (deg) => BUILDING_COLORS.map(([h, hex]) => [h, rotateHue(hex, deg)]);
+  const bucket = ['%', ['+', ['to-number', ['coalesce', ['id'], 0]], ['round', heightInput]], 4];
+  return ['match', bucket,
+    0, ramp(BUILDING_COLORS),
+    1, ramp(shift(28)),
+    2, ramp(shift(-28)),
+    ramp(shift(55))];
+}
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -99,7 +148,11 @@ map.on('load', () => {
   // Declutter: hide shop/restaurant icons and house numbers — great on
   // a map you're reading, distracting in a game you're flying through.
   for (const layer of style.layers) {
-    if (layer.id.startsWith('poi') || layer.id.includes('housenumber')) {
+    // Also drop the flat "bridge" road lines: the map draped them on the
+    // terrain at sea level, so they floated on the water beneath our real
+    // 3D bridge decks. Our decks replace them.
+    if (layer.id.startsWith('poi') || layer.id.includes('housenumber')
+        || layer.id.includes('bridge')) {
       map.removeLayer(layer.id);
     }
   }
@@ -123,14 +176,8 @@ map.on('load', () => {
       type: 'fill-extrusion',
       minzoom: 13,
       paint: {
-        // Color by height. We build a MapLibre "interpolate" expression
-        // from the BUILDING_COLORS list in config.js: it blends smoothly
-        // between the color stops based on each building's render_height.
-        // ("coalesce" means "use render_height, or 0 if it's missing".)
-        'fill-extrusion-color': [
-          'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 0],
-          ...BUILDING_COLORS.flat(),
-        ],
+        // Color by height AND give neighbours variety (see below).
+        'fill-extrusion-color': buildingColorExpression(),
         'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 5],
         'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
         'fill-extrusion-opacity': 0.95,
@@ -215,7 +262,9 @@ function groundAt(lng, lat, fallback = 0) {
   if (elevation === null || elevation === undefined || Number.isNaN(elevation)) {
     return fallback;
   }
-  return Math.max(0, elevation); // our ocean filter makes water = 0
+  // Real elevation — NEGATIVE over water now that we keep the sea floor.
+  // Callers decide whether they can go below sea level (see updatePhysics).
+  return elevation;
 }
 
 
@@ -1154,7 +1203,11 @@ function updatePhysics(dt) {
   // exp(-k·dt) is the frame-rate-independent way to say
   // "lose k-ish fraction of this speed per second".
   fwdSpeed *= Math.exp(-phys.DRAG * dt);
-  const onGround = car.alt < car.ground + 1;
+  // The lowest we can go: divers (the UFO) sink to the real sea floor;
+  // everything else stops at the water surface (sea level, 0).
+  const canDive = VEHICLES[state.vehicle].canDive;
+  const floorAlt = canDive ? car.ground : Math.max(0, car.ground);
+  const onGround = car.alt < floorAlt + 1;
   const grip = onGround ? phys.GRIP_GROUND : phys.GRIP_AIR;
   sideSpeed *= Math.exp(-grip * dt);
 
@@ -1183,12 +1236,11 @@ function updatePhysics(dt) {
   car.vAlt *= Math.exp(-vDrag * dt);
   car.alt += car.vAlt * dt;
 
-  // The ground is solid — and with terrain, "the ground" is wherever
-  // the hill under you happens to be. Driving uphill, this clamp is
-  // what carries the car up the slope; driving off a crest, gravity
-  // takes over and you catch air.
-  if (car.alt <= car.ground) {
-    car.alt = car.ground;
+  // The floor is solid — a hillside, the street, or (for divers) the sea
+  // bed. Driving uphill, this clamp carries the car up the slope; off a
+  // crest, gravity takes over and you catch air.
+  if (car.alt <= floorAlt) {
+    car.alt = floorAlt;
     car.vAlt = Math.max(0, car.vAlt);
   }
 
@@ -1409,6 +1461,7 @@ const hud = {
   flightMode: document.getElementById('flight-mode'),
   modeButton: document.getElementById('btn-mode'),
   message: document.getElementById('message'),
+  underwater: document.getElementById('underwater'),
 };
 
 let messageTimer = null;
@@ -1442,6 +1495,11 @@ function updateHUD() {
   const mph = Math.hypot(car.vx, car.vy) * 2.23694;
   hud.speed.textContent = `${Math.round(mph)} mph`;
   hud.altitude.textContent = `${Math.round(car.alt * 3.28084)} ft`;
+
+  // Underwater wash: below sea level (alt < 0), fade in with depth,
+  // maxing out around 30 m down.
+  const depth = Math.max(0, -car.alt);
+  hud.underwater.style.opacity = Math.min(0.85, depth / 30);
 
   // Flight mode chip + touch button label. ✈ = glide, ⬆ = hover.
   const gliding = state.flightMode === 'glide';

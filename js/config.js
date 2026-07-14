@@ -78,6 +78,7 @@ export const VEHICLES = [
   {
     name: 'UFO',
     model: 'ufo',
+    canDive: true,        // the saucer can descend below sea level
     physics: {
       MAX_SPEED: 420,     // ≈ 940 mph. It is a UFO.
       ACCEL: 170,         // and it gets there absurdly fast
@@ -148,6 +149,10 @@ export const TERRAIN = {
   ENABLED: true,       // set false if an older phone struggles
   EXAGGERATION: 1.0,   // 1 = true-to-life; 1.5 = drama-documentary hills
   TILES: 'flatdem://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+  // false = KEEP the real sea-floor depth (the bay gets underwater
+  // canyons you can dive into). true = flatten everything below sea
+  // level so water is a flat plane at height 0.
+  FLATTEN_OCEAN: false,
 };
 
 // 3D bridges, built from simple shapes at REAL coordinates fetched from
