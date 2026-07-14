@@ -1026,8 +1026,10 @@ function buildBridges() {
     const across = new THREE.Vector3(-along.z, 0, along.x);
 
     if (b.drawTowers) {
-      const legGeo = new THREE.BoxGeometry(5, b.towerHeight, 5);
-      const beamGeo = new THREE.BoxGeometry(21, 4, 4);
+      // Chunkier legs: 6.5 m wide and 9 m DEEP so the tower still reads as
+      // a solid tower when seen end-on (before it looked like a thin pole).
+      const legGeo = new THREE.BoxGeometry(6.5, b.towerHeight, 9);
+      const beamGeo = new THREE.BoxGeometry(25, 5, 10);
       for (const top of towerTops) {
         const tower = new THREE.Group();
         for (const side of [-1, 1]) {
@@ -1035,7 +1037,9 @@ function buildBridges() {
           leg.position.set(9 * side, b.towerHeight / 2, 0);
           tower.add(leg);
         }
-        for (const beamY of [b.deckHeight, b.towerHeight * 0.72, b.towerHeight * 0.97]) {
+        // Four crossbeams up the tower give it the portal-frame look.
+        for (const f of [0, 0.5, 0.75, 0.96]) {
+          const beamY = f === 0 ? b.deckHeight : b.towerHeight * f;
           const beam = new THREE.Mesh(beamGeo, mat);
           beam.position.y = beamY;
           tower.add(beam);
@@ -1225,7 +1229,15 @@ function makeWaterMaterial() {
       uniform float uOpacity;
       varying vec3 vWorld;
 
-      float hash(vec2 x){ return fract(sin(dot(x, vec2(127.1, 311.7))) * 43758.5453123); }
+      // Precision-stable hash (Dave Hoskins). The classic sin()-based hash
+      // goes chaotic at large coordinates, which made the water look
+      // glitchy far from the start point / out over the ocean; this one
+      // stays stable, so the surface is calm no matter where you fly.
+      float hash(vec2 p){
+        vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+        p3 += dot(p3, p3.yzx + 33.33);
+        return fract((p3.x + p3.y) * p3.z);
+      }
       float noise(vec2 x){
         vec2 i = floor(x), f = fract(x);
         f = f * f * (3.0 - 2.0 * f);
@@ -1239,11 +1251,13 @@ function makeWaterMaterial() {
         // Gentle broad colour undulation across the bay.
         float broad = noise(p * 0.004 + uTime * 0.05);
         vec3 col = mix(uDeep, uShallow, broad * 0.5);
-        // Sun glitter: two drifting NOISE fields (so it's irregular, not a
-        // grid), high-passed so only the bright peaks sparkle.
-        float s = noise(p * 0.06 + vec2(uTime * 0.35, uTime * 0.20))
-                + noise(p * 0.14 - vec2(uTime * 0.28, uTime * 0.18)) * 0.7;
-        float glint = smoothstep(1.32, 1.62, s);
+        // Sun glitter: two drifting NOISE fields, high-passed so only the
+        // bright peaks sparkle. Lower frequencies + gentler drift than
+        // before, so the glints are larger and don't strobe/alias when you
+        // fly over them at speed.
+        float s = noise(p * 0.03 + vec2(uTime * 0.22, uTime * 0.13))
+                + noise(p * 0.07 - vec2(uTime * 0.18, uTime * 0.11)) * 0.7;
+        float glint = smoothstep(1.30, 1.66, s);
         col += uSun * glint * 0.5;
         gl_FragColor = vec4(col, uOpacity);
       }
