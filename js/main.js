@@ -1209,6 +1209,92 @@ function buildWater() {
   return water;
 }
 
+// --- Fake building shadows ---
+// MapLibre can't cast real shadows, so we fake them: for each nearby
+// building we draw a flat dark shape stretched away from the low sun.
+// Shadow shape = the convex hull of the footprint AND the footprint
+// pushed along the ground by (height × length) — a proper connected
+// streak, longer for taller buildings. High quality only.
+const shadowState = { mesh: null, lastBuild: -Infinity };
+
+// 2D convex hull (Andrew's monotone chain) of [x, z] points.
+function convexHull(pts) {
+  pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (pts.length < 3) return pts;
+  const cross = (o, a, b) => (a[0]-o[0])*(b[1]-o[1]) - (a[1]-o[1])*(b[0]-o[0]);
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length-2], lower[lower.length-1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length-2], upper[upper.length-1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop(); upper.pop();
+  return lower.concat(upper);
+}
+
+function buildShadowLayer() {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    color: 0x0a1018, transparent: true, opacity: 0.36, depthWrite: false,
+  }));
+  mesh.renderOrder = 0;      // above the water, below the 3D objects
+  mesh.frustumCulled = false;
+  shadowState.mesh = mesh;
+  return mesh;
+}
+
+// Rebuild the shadow geometry from the cached building footprints near
+// the car. Runs ~once a second, and only on High quality.
+function rebuildShadows(nowMs) {
+  const mesh = shadowState.mesh;
+  if (!mesh) return;
+  if (!gfx().shadows) { mesh.visible = false; return; }
+  mesh.visible = true;
+  if (nowMs - shadowState.lastBuild < 1000) return;
+  shadowState.lastBuild = nowMs;
+
+  // Horizontal direction the shadows point (away from the sun).
+  const s = three.sun.position;
+  const dl = Math.hypot(s.x, s.z) || 1;
+  const dirX = -s.x / dl, dirZ = -s.z / dl;
+
+  const positions = [];
+  let count = 0;
+  for (const b of buildingCache.list) {
+    if (count >= 400) break;
+    const cLng = (b.minLng + b.maxLng) / 2, cLat = (b.minLat + b.maxLat) / 2;
+    if (metersBetween(cLng, cLat, car.lng, car.lat) > 900) continue;
+
+    const disp = Math.min(b.height * 1.7, 130); // shadow length, capped
+    const gy = Math.max(0, groundAt(cLng, cLat, 0)) + 0.6; // just above ground
+    const dx = dirX * disp, dz = dirZ * disp;
+
+    // Footprint points AND the same points shoved along the ground.
+    const pts = [];
+    for (const [lng, lat] of b.rings[0]) {
+      const p = toScene(lng, lat, gy);
+      pts.push([p.x, p.z]);
+      pts.push([p.x + dx, p.z + dz]);
+    }
+    const hull = convexHull(pts);
+    if (hull.length < 3) continue;
+    for (let k = 1; k < hull.length - 1; k++) {
+      positions.push(hull[0][0], gy, hull[0][1]);
+      positions.push(hull[k][0], gy, hull[k][1]);
+      positions.push(hull[k + 1][0], gy, hull[k + 1][1]);
+    }
+    count++;
+  }
+  mesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  mesh.geometry.computeBoundingSphere();
+}
+
 // --- Street traffic ---
 // A pool of little cars that drive along the REAL roads near you. We ask
 // MapLibre for road shapes in view, then walk each car along one.
@@ -1357,6 +1443,7 @@ const gameLayer = {
     three.scene.add(buildBushes());
     three.scene.add(buildWater());
     three.scene.add(buildTraffic());
+    three.scene.add(buildShadowLayer());
 
     // Fake drop-shadow: a dark circle on the ground under the car.
     // It fades and spreads as you climb — a surprisingly important cue
@@ -1878,6 +1965,7 @@ function tick(now) {
   checkCollisions(now);
   checkDelivery();
   updateTraffic(dt, now);
+  rebuildShadows(now);
   updateChaseCamera(dt);
   updateHUD();
 }
