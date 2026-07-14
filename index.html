@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SF Sky Courier</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Empty favicon so the browser doesn't log a "favicon not found" error -->
+  <link rel="icon" href="data:,">
+
+  <!-- MapLibre GL JS: the open-source library that draws the real 3D map.
+       We load it from a CDN (Content Delivery Network) — a public server that
+       hosts popular libraries so we don't have to download them ourselves. -->
+  <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+  <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+
+  <!-- An "import map" tells the browser where to find the three.js library
+       when our code says `import ... from 'three'`. -->
+  <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+  </script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- The map fills the whole screen. Everything else floats on top of it. -->
+  <div id="map"></div>
+
+  <!-- ===== HUD (Heads-Up Display): score, compass, speed, messages ===== -->
+  <div id="hud">
+    <div id="topbar">
+      <div class="panel" id="score-box">
+        SCORE <span id="score">0</span>
+      </div>
+      <div class="panel" id="compass">
+        <!-- This arrow is rotated by JavaScript to point at the target -->
+        <div id="compass-arrow">&#9650;</div>
+        <div id="distance">&mdash;</div>
+      </div>
+      <div class="panel" id="target-box">
+        DELIVER TO <span id="target">&mdash;</span>
+      </div>
+    </div>
+
+    <div id="readouts">
+      <span class="panel" id="speed">0 mph</span>
+      <span class="panel" id="altitude">0 ft</span>
+    </div>
+
+    <!-- Short popup messages like "Delivered! +100" appear here -->
+    <div id="message"></div>
+
+    <div id="help" class="panel">
+      W / &#8593; drive &nbsp;&bull;&nbsp; S / &#8595; brake &nbsp;&bull;&nbsp;
+      A D / &#8592; &#8594; steer &nbsp;&bull;&nbsp; hold SPACE to fly
+    </div>
+  </div>
+
+  <!-- ===== Start screen, shown until the player clicks ===== -->
+  <div id="start-overlay">
+    <div id="start-card">
+      <h1>SF&nbsp;SKY&nbsp;COURIER</h1>
+      <p>Deliver packages across the real San&nbsp;Francisco.<br>
+         Drive the streets &mdash; or hold <b>SPACE</b> and fly over them.</p>
+      <ul>
+        <li><b>W / &#8593;</b> accelerate</li>
+        <li><b>S / &#8595;</b> brake / reverse</li>
+        <li><b>A D / &#8592; &#8594;</b> steer</li>
+        <li><b>SPACE</b> (hold) upward thrust</li>
+      </ul>
+      <button id="start-button">START ENGINE</button>
+    </div>
+  </div>
+
+  <!-- Our game code. type="module" lets us use modern `import` statements. -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

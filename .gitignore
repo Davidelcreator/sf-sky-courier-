@@ -1,0 +1,3 @@
+# Files git should NOT track.
+# .claude/ holds local tooling config specific to this machine.
+.claude/

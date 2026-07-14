@@ -1,0 +1,195 @@
+/* ============================================================
+   style.css — all the visual styling for the page and HUD.
+   The 3D world itself is drawn by MapLibre/three.js on a canvas;
+   this file only styles the HTML floating on top of it.
+   ============================================================ */
+
+/* Make the page fill the window exactly, with no scrollbars. */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  /* Sky trick: MapLibre leaves the area above the horizon transparent,
+     so this gradient shows through and becomes the sky when you fly. */
+  background: linear-gradient(#3d6fb5 0%, #7db3e8 45%, #cfe6f7 100%);
+}
+
+/* The map canvas fills the whole screen. */
+#map {
+  position: absolute;
+  inset: 0;               /* shorthand for top/right/bottom/left: 0 */
+  background: transparent;
+}
+
+/* ===== HUD ===== */
+
+/* The HUD container ignores mouse clicks (pointer-events: none) so the
+   player can't accidentally drag the map through it. */
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Reusable dark translucent panel look. */
+.panel {
+  background: rgba(10, 18, 32, 0.75);
+  color: #e8f0ff;
+  border: 1px solid rgba(120, 200, 255, 0.35);
+  border-radius: 10px;
+  padding: 8px 14px;
+  backdrop-filter: blur(4px);
+}
+
+#topbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+#score-box, #target-box {
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: #9fb8d8;
+}
+
+#score, #target {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+#target { font-size: 16px; color: #ffd166; }
+
+/* Compass: the arrow div is rotated from JavaScript every frame. */
+#compass {
+  text-align: center;
+  min-width: 70px;
+}
+
+#compass-arrow {
+  font-size: 30px;
+  line-height: 1;
+  color: #ffd166;
+  text-shadow: 0 0 10px rgba(255, 209, 102, 0.9);
+  transition: transform 0.1s linear;   /* smooths the arrow's rotation */
+}
+
+#distance {
+  font-size: 12px;
+  color: #9fb8d8;
+  margin-top: 2px;
+}
+
+/* Speed / altitude readouts, bottom-left. */
+#readouts {
+  position: absolute;
+  bottom: 14px;
+  left: 12px;
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;  /* digits all same width = no jitter */
+}
+
+/* Controls reminder, bottom-center. */
+#help {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: #9fb8d8;
+  white-space: nowrap;
+}
+
+/* Pop-up messages like "Delivered! +100". */
+#message {
+  position: absolute;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 34px;
+  font-weight: 800;
+  color: #ffd166;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+  opacity: 0;                    /* invisible until JavaScript shows it */
+  transition: opacity 0.3s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+#message.show { opacity: 1; }
+
+/* ===== Start screen ===== */
+
+#start-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 10, 20, 0.55);
+}
+
+#start-card {
+  background: rgba(10, 18, 32, 0.92);
+  color: #e8f0ff;
+  border: 1px solid rgba(120, 200, 255, 0.4);
+  border-radius: 16px;
+  padding: 32px 44px;
+  text-align: center;
+  max-width: 420px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+#start-card h1 {
+  margin: 0 0 10px;
+  letter-spacing: 4px;
+  color: #7df9ff;
+  text-shadow: 0 0 14px rgba(125, 249, 255, 0.6);
+}
+
+#start-card p { color: #b8c9e2; margin: 0 0 16px; }
+
+#start-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+  text-align: left;
+  display: inline-block;
+  color: #9fb8d8;
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+#start-button {
+  display: block;            /* buttons are inline by default; this puts */
+  margin: 0 auto;            /* it on its own line, centered */
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 12px 34px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #06121f;
+  background: linear-gradient(#7df9ff, #37c8dd);
+  box-shadow: 0 0 18px rgba(125, 249, 255, 0.5);
+}
+
+#start-button:hover { filter: brightness(1.1); }
+
+/* Hide the start screen once the game begins (JS adds this class). */
+#start-overlay.hidden { display: none; }
