@@ -37,9 +37,9 @@ export const BEACONS = [
 // Physics constants. Units are meters and seconds (m/s, m/s²).
 // These are "arcade" values — a real car can't do any of this.
 export const PHYSICS = {
-  ACCEL: 28,          // forward acceleration when holding W (m/s²)
-  BRAKE: 35,          // braking/reverse acceleration when holding S
-  MAX_SPEED: 55,      // top forward speed (55 m/s ≈ 123 mph)
+  ACCEL: 60,          // forward acceleration when holding W (m/s²)
+  BRAKE: 70,          // braking/reverse acceleration when holding S
+  MAX_SPEED: 110,     // top forward speed (110 m/s ≈ 246 mph!)
   MAX_REVERSE: 12,    // top reverse speed
   TURN_RATE: 2.0,     // how fast the car turns (radians per second)
 
