@@ -80,28 +80,115 @@ export const GAME = {
   CAR_SCALE: 1.8,      // 1 = realistic car size; bigger is easier to see
 };
 
-// 3D suspension bridges, built from simple shapes at real coordinates
-// (the map data only draws bridges as flat roads — no towers/cables).
-// "ends" are the two shore points of the span; towers and cable anchors
-// sit at fractions (0..1) along that line, so everything stays straight.
+// 3D bridges, built from simple shapes at REAL coordinates fetched from
+// OpenStreetMap (the same data the map itself is drawn from).
+//
+// How each bridge works:
+//  - "deck" is a polyline: the FIRST and LAST points touch the ground
+//    (those segments become the approach RAMPS); every point between
+//    rides at deckHeight.
+//  - "piers: true" adds support columns under the elevated deck.
+//  - Suspension bridges also get "towers" (+ towerHeight) and
+//    "cableAnchors" (where the main cables meet the deck). Set
+//    "drawTowers: false" when OpenStreetMap already renders the real
+//    towers as gray 3D shapes — like the Golden Gate's! — so we only
+//    add the cables, deck, and ramps around them.
 export const BRIDGES = [
   {
     name: 'Golden Gate Bridge',
     color: 0xd1451e,            // International Orange, its real paint!
-    ends: [[-122.4760, 37.8070], [-122.4800, 37.8300]],
-    towerPositions: [0.28, 0.72],
-    anchorPositions: [0.05, 0.95],
-    towerHeight: 227,           // real: 227 m above the water
-    deckHeight: 67,             // real: the roadway is ~67 m up
+    deckHeight: 67,
+    towerHeight: 227,
+    drawTowers: false,          // OSM renders the real towers (in gray)
+    towers: [[-122.4778921, 37.8140144], [-122.4792343, 37.8255026]],
+    cableAnchors: [[-122.4775337, 37.8109470], [-122.4795927, 37.8285700]],
+    deck: [
+      [-122.4771673, 37.8078108],   // ground, SF side
+      [-122.4775337, 37.8109470],
+      [-122.4795927, 37.8285700],
+      [-122.4799591, 37.8317062],   // ground, Marin side
+    ],
   },
   {
-    name: 'Bay Bridge (west span)',
+    name: 'Bay Bridge — west span',
     color: 0xb8bcc4,            // silver-gray steel
-    ends: [[-122.3872, 37.7866], [-122.3655, 37.8107]],
-    towerPositions: [0.3, 0.7],
-    anchorPositions: [0.05, 0.95],
-    towerHeight: 158,
     deckHeight: 67,
+    towerHeight: 158,
+    drawTowers: true,           // no 3D towers in the map data here
+    towers: [
+      [-122.3864117, 37.7903444], [-122.3810007, 37.7953129],
+      [-122.3760816, 37.7998298], [-122.3706706, 37.8047983],
+    ],
+    cableAnchors: [[-122.3898551, 37.7871827], [-122.3672272, 37.8079600]],
+    deck: [
+      [-122.3926836, 37.7845855],   // ground, SoMa
+      [-122.3908389, 37.7862793],
+      [-122.3662434, 37.8088634],
+      [-122.3651366, 37.8098797],   // ground, Yerba Buena tunnel
+    ],
+  },
+  {
+    name: 'Bay Bridge — east span',
+    color: 0xf2f2f2,            // the new span's white tower
+    deckHeight: 25,
+    towerHeight: 160,
+    drawTowers: true,
+    towers: [[-122.3576000, 37.8158500]], // single SAS tower
+    cableAnchors: [[-122.3596043, 37.8148222], [-122.3558151, 37.8167770]],
+    piers: true,
+    deck: [
+      [-122.3612000, 37.8140200],   // ground, Yerba Buena tunnel
+      [-122.3604463, 37.8143878],
+      [-122.3520259, 37.8187318],   // the span curves — real OSM points
+      [-122.3436055, 37.8215495],
+      [-122.3335850, 37.8216347],
+      [-122.3277570, 37.8221892],
+      [-122.3258000, 37.8223500],   // ground, Oakland
+    ],
+  },
+  {
+    name: 'Richmond–San Rafael Bridge',
+    color: 0x8a8f98,
+    deckHeight: 40,
+    piers: true,
+    deck: [
+      [-122.4800000, 37.9430000],   // ground, San Rafael
+      [-122.4778253, 37.9424611],
+      [-122.4515209, 37.9357067],
+      [-122.4251407, 37.9337395],
+      [-122.4053225, 37.9325123],
+      [-122.4032000, 37.9324000],   // ground, Richmond
+    ],
+  },
+  {
+    name: 'San Mateo–Hayward Bridge',
+    color: 0x8a8f98,
+    deckHeight: 18,
+    piers: true,
+    deck: [
+      [-122.2652000, 37.5717000],   // ground, San Mateo
+      [-122.2632880, 37.5730119],
+      [-122.2363066, 37.5926572],
+      [-122.2128641, 37.5996363],
+      [-122.1812355, 37.6090372],
+      [-122.1556619, 37.6166383],
+      [-122.1537000, 37.6172000],   // ground, Hayward
+    ],
+  },
+  {
+    name: 'Dumbarton Bridge',
+    color: 0x8a8f98,
+    deckHeight: 16,
+    piers: true,
+    deck: [
+      [-122.1316000, 37.4971000],   // ground, Menlo Park
+      [-122.1301512, 37.4980388],
+      [-122.1225477, 37.5030369],
+      [-122.1151676, 37.5080016],
+      [-122.1100472, 37.5120514],
+      [-122.1082876, 37.5139984],
+      [-122.1070000, 37.5150000],   // ground, Fremont
+    ],
   },
 ];
 

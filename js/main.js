@@ -457,82 +457,100 @@ function buildBeacon() {
   return { beaconGroup, beamMaterial, ring };
 }
 
-// Build the suspension bridges from simple shapes. Everything is done
-// in scene coordinates (meters), so we can use plain vector math:
-// towers are boxes standing on the span line, cables are tubes bent
-// along curves between the tower tops.
+// Build the bridges from simple shapes at real OSM coordinates.
+// Everything is in scene coordinates (meters), so plain vector math
+// works: decks are boxes laid point-to-point, towers are boxes standing
+// on the line, cables are tubes bent along curves between tower tops.
 function buildBridges() {
   const group = new THREE.Group();
+  const deckMat = new THREE.MeshLambertMaterial({ color: 0x454b54 });
+  const pierMat = new THREE.MeshLambertMaterial({ color: 0x8a8f98 });
 
   for (const b of BRIDGES) {
     const mat = new THREE.MeshLambertMaterial({ color: b.color });
-    const deckMat = new THREE.MeshLambertMaterial({ color: 0x454b54 });
 
-    // The two shore points, as positions in our meters-based scene.
-    const endA = toScene(b.ends[0][0], b.ends[0][1], 0);
-    const endB = toScene(b.ends[1][0], b.ends[1][1], 0);
-    const spanLength = endA.distanceTo(endB);
+    // --- Deck: one slab per polyline segment. First/last points are on
+    // the ground, so the outer segments naturally become the ramps.
+    const deckPts = b.deck.map((p, i) => {
+      const grounded = i === 0 || i === b.deck.length - 1;
+      return toScene(p[0], p[1], grounded ? 1 : b.deckHeight);
+    });
+    for (let i = 0; i < deckPts.length - 1; i++) {
+      const a = deckPts[i];
+      const c = deckPts[i + 1];
+      const len = a.distanceTo(c);
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(22, 3, len), deckMat);
+      slab.position.copy(a.clone().add(c).multiplyScalar(0.5));
+      // lookAt points the slab's long (Z) axis at the far end — which
+      // also tilts the ramp segments to their correct slope for free.
+      slab.lookAt(c);
+      group.add(slab);
 
-    // along = unit vector pointing down the bridge; across = 90° from it.
-    const along = endB.clone().sub(endA).normalize();
-    const across = new THREE.Vector3(-along.z, 0, along.x);
-    // How much to rotate a box so its length lies along the bridge.
-    const angleY = Math.atan2(along.x, along.z);
-
-    // A point at fraction t along the span, at a given height.
-    const at = (t, y) => endA.clone().lerp(endB, t).setY(y);
-
-    // --- Towers: two legs + three crossbeams each ---
-    const legGeo = new THREE.BoxGeometry(5, b.towerHeight, 5);
-    const beamGeo = new THREE.BoxGeometry(21, 4, 4);
-    for (const t of b.towerPositions) {
-      const tower = new THREE.Group();
-      for (const side of [-1, 1]) {
-        const leg = new THREE.Mesh(legGeo, mat);
-        leg.position.set(9 * side, b.towerHeight / 2, 0);
-        tower.add(leg);
+      // Support piers under the elevated stretches.
+      if (b.piers) {
+        for (let d = 90; d < len - 40; d += 180) {
+          const pos = a.clone().lerp(c, d / len);
+          if (pos.y < 8) continue; // ramp is nearly at the ground here
+          const pier = new THREE.Mesh(new THREE.BoxGeometry(5, pos.y, 5), pierMat);
+          pier.position.set(pos.x, pos.y / 2, pos.z);
+          group.add(pier);
+        }
       }
-      for (const beamY of [b.deckHeight, b.towerHeight * 0.72, b.towerHeight * 0.97]) {
-        const beam = new THREE.Mesh(beamGeo, mat);
-        beam.position.y = beamY;
-        tower.add(beam);
-      }
-      tower.position.copy(at(t, 0));
-      // Towers stand ACROSS the bridge; rotate 90° past the span angle.
-      tower.rotation.y = angleY + Math.PI / 2;
-      group.add(tower);
     }
 
-    // --- Main cables: one swoop per side of the roadway ---
-    const [tA, tB] = b.towerPositions;
-    const [aA, aB] = b.anchorPositions;
+    if (!b.towers) continue; // plain causeway bridges are done here
+
+    // --- Suspension kit: towers + main cables ---
+    const towerTops = b.towers.map((p) => toScene(p[0], p[1], b.towerHeight));
+    const anchorA = toScene(b.cableAnchors[0][0], b.cableAnchors[0][1], b.deckHeight);
+    const anchorB = toScene(b.cableAnchors[1][0], b.cableAnchors[1][1], b.deckHeight);
+
+    // Direction along the span, and its 90° sideways partner (used to
+    // offset one cable to each edge of the roadway).
+    const along = anchorB.clone().sub(anchorA).setY(0).normalize();
+    const across = new THREE.Vector3(-along.z, 0, along.x);
+
+    if (b.drawTowers) {
+      const legGeo = new THREE.BoxGeometry(5, b.towerHeight, 5);
+      const beamGeo = new THREE.BoxGeometry(21, 4, 4);
+      for (const top of towerTops) {
+        const tower = new THREE.Group();
+        for (const side of [-1, 1]) {
+          const leg = new THREE.Mesh(legGeo, mat);
+          leg.position.set(9 * side, b.towerHeight / 2, 0);
+          tower.add(leg);
+        }
+        for (const beamY of [b.deckHeight, b.towerHeight * 0.72, b.towerHeight * 0.97]) {
+          const beam = new THREE.Mesh(beamGeo, mat);
+          beam.position.y = beamY;
+          tower.add(beam);
+        }
+        tower.position.set(top.x, 0, top.z);
+        // Towers stand ACROSS the bridge; rotate 90° past the span angle.
+        tower.rotation.y = Math.atan2(along.x, along.z) + Math.PI / 2;
+        group.add(tower);
+      }
+    }
+
+    // The cable's path: deck anchor → over every tower top → deck anchor.
+    // Between two towers it sags almost to the deck; elsewhere it just
+    // droops a little. One cable per side of the roadway.
+    const chain = [anchorA, ...towerTops, anchorB];
     for (const side of [-1, 1]) {
       const off = across.clone().multiplyScalar(9 * side);
-      const topA = at(tA, b.towerHeight).add(off);
-      const topB = at(tB, b.towerHeight).add(off);
-
-      // A bezier curve's middle is pulled toward its control point.
-      // Solving so the cable's low point lands just above the deck:
-      const sagY = 2 * (b.deckHeight + 4) - b.towerHeight;
-      const control = at((tA + tB) / 2, sagY).add(off);
-      const mainCurve = new THREE.QuadraticBezierCurve3(topA, control, topB);
-      group.add(new THREE.Mesh(new THREE.TubeGeometry(mainCurve, 40, 0.8, 6), mat));
-
-      // Side cables: tower tops down to the anchors at deck level.
-      for (const [tt, aa] of [[tA, aA], [tB, aB]]) {
-        const line = new THREE.LineCurve3(
-          at(tt, b.towerHeight).add(off),
-          at(aa, b.deckHeight).add(off),
-        );
-        group.add(new THREE.Mesh(new THREE.TubeGeometry(line, 2, 0.7, 6), mat));
+      for (let i = 0; i < chain.length - 1; i++) {
+        const p = chain[i].clone().add(off);
+        const q = chain[i + 1].clone().add(off);
+        const isMainSpan = i > 0 && i < chain.length - 2; // tower→tower
+        // A bezier curve's middle is pulled toward its control point.
+        const controlY = isMainSpan
+          ? 2 * (b.deckHeight + 4) - (p.y + q.y) / 2  // sag to deck level
+          : (p.y + q.y) / 2 - p.distanceTo(q) * 0.12; // gentle droop
+        const control = p.clone().lerp(q, 0.5).setY(controlY);
+        const curve = new THREE.QuadraticBezierCurve3(p, control, q);
+        group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 32, 0.8, 6), mat));
       }
     }
-
-    // --- Deck: one long slab at roadway height ---
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(22, 3, spanLength), deckMat);
-    deck.position.copy(at(0.5, b.deckHeight - 1.5));
-    deck.rotation.y = angleY;
-    group.add(deck);
   }
   return group;
 }
