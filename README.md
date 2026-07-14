@@ -15,7 +15,12 @@ solid until you climb above their roofs — and yes, you can land on them.
 | `S` / `↓`      | Brake / reverse         |
 | `A` `D` / `←` `→` | Steer                |
 | `SPACE` (hold) | Upward thrust — fly!    |
+| `G`            | Toggle HOVER / GLIDE flight |
 | `R`            | Reset back to the start |
+
+In **GLIDE** mode your forward speed generates lift, so at full speed
+you sail nearly flat across the city; slow down and you sink. **HOVER**
+is the default: gravity always pulls, thrust fights it.
 
 On phones and tablets, on-screen controls appear automatically: a
 joystick on the left (push to steer, and up/down to accelerate/brake)

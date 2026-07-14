@@ -189,6 +189,20 @@ body.touch #readouts {                        /* make room for the buttons */
   position: absolute;
   bottom: 30px;
   right: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* MODE is a tap-toggle, so it's a smaller pill above the FLY button. */
+#btn-mode {
+  width: auto;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 20px;
+  font-size: 12px;
+  letter-spacing: 1px;
 }
 
 #btn-fly {

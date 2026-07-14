@@ -131,6 +131,7 @@ const state = {
   deliveries: 0,        // how many packages delivered so far
   targetIndex: 0,       // which BEACONS entry we're delivering to
   camHeading: START.heading, // camera direction (lags behind the car)
+  flightMode: 'hover',  // 'hover' (thrust vs gravity) or 'glide' (wings!)
 };
 
 // Handy while learning: open the browser console (F12) and type
@@ -262,6 +263,24 @@ setupJoystick();
 if (navigator.maxTouchPoints > 0) {
   document.body.classList.add('touch');
 }
+
+// --- Flight mode toggle ---
+// HOVER: gravity always pulls; feather FLY/SPACE to hold altitude.
+// GLIDE: forward speed generates lift — sail across the city, and slow
+// down (or switch back to hover) to descend. G key or the MODE button.
+function toggleFlightMode() {
+  state.flightMode = state.flightMode === 'hover' ? 'glide' : 'hover';
+  flashMessage(state.flightMode === 'glide' ? 'GLIDE MODE' : 'HOVER MODE', 1200);
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyG' && state.running) toggleFlightMode();
+});
+
+document.getElementById('btn-mode').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (state.running) toggleFlightMode();
+});
 
 // --- Reset key ---
 // Stranded in the bay? Press R to teleport back to the start.
@@ -619,8 +638,21 @@ function updatePhysics(dt) {
 
   // --- Vertical: thrust vs gravity vs drag ---
   if (keys.thrust) car.vAlt += PHYSICS.THRUST * dt;
-  car.vAlt -= PHYSICS.GRAVITY * dt;
-  car.vAlt *= Math.exp(-PHYSICS.VERTICAL_DRAG * dt);
+
+  // In GLIDE mode, forward speed makes lift (like wings) that cancels
+  // part of gravity. min() caps the lift: gliding always sinks a
+  // little, so it can never replace the thrust button.
+  let gravity = PHYSICS.GRAVITY;
+  if (state.flightMode === 'glide') {
+    const lift = Math.min(1, horizSpeed / PHYSICS.GLIDE_LIFT_SPEED)
+               * PHYSICS.GLIDE_LIFT_MAX;
+    gravity *= 1 - lift;
+  }
+  car.vAlt -= gravity * dt;
+
+  const vDrag = state.flightMode === 'glide'
+    ? PHYSICS.GLIDE_VERTICAL_DRAG : PHYSICS.VERTICAL_DRAG;
+  car.vAlt *= Math.exp(-vDrag * dt);
   car.alt += car.vAlt * dt;
 
   // The ground is solid.
@@ -815,6 +847,8 @@ const hud = {
   distance: document.getElementById('distance'),
   speed: document.getElementById('speed'),
   altitude: document.getElementById('altitude'),
+  flightMode: document.getElementById('flight-mode'),
+  modeButton: document.getElementById('btn-mode'),
   message: document.getElementById('message'),
 };
 
@@ -849,6 +883,11 @@ function updateHUD() {
   const mph = Math.hypot(car.vx, car.vy) * 2.23694;
   hud.speed.textContent = `${Math.round(mph)} mph`;
   hud.altitude.textContent = `${Math.round(car.alt * 3.28084)} ft`;
+
+  // Flight mode chip + touch button label. ✈ = glide, ⬆ = hover.
+  const gliding = state.flightMode === 'glide';
+  hud.flightMode.textContent = gliding ? '✈ GLIDE' : '⬆ HOVER';
+  hud.modeButton.textContent = gliding ? '✈ GLIDE' : '⬆ HOVER';
 }
 
 

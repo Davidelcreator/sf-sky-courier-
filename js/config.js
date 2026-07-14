@@ -53,6 +53,13 @@ export const PHYSICS = {
   THRUST: 45,         // upward push while holding SPACE (m/s²).
                       // Must beat GRAVITY or you'd never take off!
   VERTICAL_DRAG: 0.9, // air resistance up/down — sets a max climb/fall speed
+
+  // GLIDE mode (toggle with G / the MODE button): forward speed makes
+  // lift, like a plane's wings. Lift cancels part of gravity — never
+  // more, so gliding always sinks a little and only SPACE can climb.
+  GLIDE_LIFT_MAX: 0.94,     // fraction of gravity canceled at full speed
+  GLIDE_LIFT_SPEED: 50,     // forward speed (m/s) that earns full lift
+  GLIDE_VERTICAL_DRAG: 1.8, // extra air resistance = steadier, floatier feel
 };
 
 // Chase camera: follows behind and above the car, looking forward.
