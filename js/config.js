@@ -131,12 +131,12 @@ export const SATELLITE = {
 // these stops, so a city block becomes a warm-to-cool gradient instead
 // of flat gray. Tweak the hex colors to taste.
 export const BUILDING_COLORS = [
-  [0,   '#c98a5e'],   // low-rise: warm terracotta
-  [12,  '#d8b48a'],   // sandy
-  [30,  '#a9c090'],   // sage green
-  [60,  '#8fb0c8'],   // steel blue
-  [120, '#6d7fb0'],   // indigo
-  [250, '#9a6fb0'],   // violet for the tallest towers
+  [0,   '#b98d63'],   // low-rise: warm tan
+  [15,  '#c2a980'],   // sand
+  [35,  '#a8b58e'],   // sage
+  [70,  '#8ba9a8'],   // muted teal
+  [130, '#8496b4'],   // slate blue
+  [250, '#9d8bab'],   // soft mauve for the tallest towers (not vivid)
 ];
 
 // Real 3D terrain: hills, mountains, valleys. Elevation tiles ("DEM" =

@@ -118,9 +118,9 @@ function buildingColorExpression() {
   const bucket = ['%', ['+', ['to-number', ['coalesce', ['id'], 0]], ['round', heightInput]], 4];
   return ['match', bucket,
     0, ramp(BUILDING_COLORS),
-    1, ramp(shift(28)),
-    2, ramp(shift(-28)),
-    ramp(shift(55))];
+    1, ramp(shift(12)),
+    2, ramp(shift(-12)),
+    ramp(shift(26))];
 }
 
 const map = new maplibregl.Map({
@@ -135,8 +135,23 @@ const map = new maplibregl.Map({
   canvasContextAttributes: { antialias: true }, // smoother 3D edges
 });
 
-// Once the style has loaded we can add our own layers on top.
-map.on('load', () => {
+// Missing sprite icons (office, atm, …) otherwise leave MapLibre's image
+// manager "not loaded", which can stop the whole map from ever finishing
+// loading. Hand back a blank pixel for any it asks for.
+map.on('styleimagemissing', (e) => {
+  if (!map.hasImage(e.id)) {
+    map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+  }
+});
+
+// Set up our layers as soon as the STYLE SPEC is ready — not when every
+// tile has downloaded. Gating on the full 'load' event meant one slow
+// tile server (it happens) could leave the game blank forever. We run
+// once, guarded by a flag, triggered by whichever event fires first.
+let didInitGame = false;
+function initGame() {
+  if (didInitGame || !map.style || !map.style._loaded) return;
+  didInitGame = true;
   const style = map.getStyle();
 
   // The style may already include a 3D-buildings layer. We remove any
@@ -180,7 +195,7 @@ map.on('load', () => {
         'fill-extrusion-color': buildingColorExpression(),
         'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 5],
         'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-        'fill-extrusion-opacity': 0.95,
+        'fill-extrusion-opacity': 1,
       },
     },
     firstSymbolId,
@@ -223,7 +238,12 @@ map.on('load', () => {
   );
 
   setBasemap(SATELLITE.ON_AT_START);
-});
+}
+
+// 'styledata' fires when the style JSON is parsed (before tiles finish);
+// 'load' is the belt-and-suspenders fallback. Either one runs initGame.
+map.on('styledata', initGame);
+map.on('load', initGame);
 
 // Switch between the drawn vector map and the satellite photo. In
 // satellite mode we hide the flat colored fills (land, water, parks) so
@@ -1003,6 +1023,24 @@ function buildBushes() {
   return group;
 }
 
+// A big translucent blue sheet at sea level (y = 0) — the water surface.
+// It shares the map's depth buffer, so LAND (terrain above 0) hides it
+// while WATER (sea floor below 0) shows it through as blue. Diving below
+// it puts you underwater. It follows the car so it always fills the view.
+function buildWater() {
+  const water = new THREE.Mesh(
+    new THREE.PlaneGeometry(80000, 80000),
+    new THREE.MeshBasicMaterial({
+      color: 0x1f6a90, transparent: true, opacity: 0.62,
+      side: THREE.DoubleSide, depthWrite: false,
+    }),
+  );
+  water.rotation.x = -Math.PI / 2; // lay it flat
+  water.renderOrder = -1;          // draw beneath the other scene objects
+  three.water = water;
+  return water;
+}
+
 // This object is MapLibre's "custom layer" — it has two jobs:
 // onAdd() builds the scene once; render() draws it every frame.
 const gameLayer = {
@@ -1059,6 +1097,7 @@ const gameLayer = {
     three.scene.add(buildBridges());
     three.scene.add(buildTrees());
     three.scene.add(buildBushes());
+    three.scene.add(buildWater());
 
     // Fake drop-shadow: a dark circle on the ground under the car.
     // It fades and spreads as you climb — a surprisingly important cue
@@ -1139,6 +1178,12 @@ function updateSceneObjects(timeSeconds) {
   three.shadow.material.opacity = Math.max(0, 0.4 - heightAboveGround / 400);
   const spread = 1 + heightAboveGround / 180;
   three.shadow.scale.set(spread, spread, 1);
+
+  // --- Water surface: keep the big sheet centered under the car ---
+  if (three.water) {
+    const w = toScene(car.lng, car.lat, 0);
+    three.water.position.set(w.x, 0, w.z);
+  }
 
   // --- Beacon at the current target, standing on its terrain ---
   const target = BEACONS[state.targetIndex];
