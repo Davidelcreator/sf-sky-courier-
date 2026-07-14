@@ -1623,10 +1623,13 @@ function updatePhysics(dt) {
 
   // --- Steering ---
   const horizSpeed = Math.hypot(car.vx, car.vy);
-  // A real car barely turns when crawling; scale turning with speed
-  // (but keep some, so you can rotate while hovering).
-  const turnFactor = 0.35 + 0.65 * Math.min(1, horizSpeed / 15);
-  car.heading += input.steer * phys.TURN_RATE * turnFactor * dt;
+  // Low end: ramp up from a floor so you can still rotate while hovering
+  // and turn sharply at normal driving speeds.
+  const lowEnd = 0.35 + 0.65 * Math.min(1, horizSpeed / 15);
+  // High end: ease steering off once you're going fast, so a flick of the
+  // wheel at 600 mph doesn't fling you sideways into a building.
+  const easeOff = 1 / (1 + Math.max(0, horizSpeed - phys.TURN_EASE_ABOVE) / phys.TURN_EASE_RATE);
+  car.heading += input.steer * phys.TURN_RATE * lowEnd * easeOff * dt;
 
   // --- Thrust forward/backward along our heading ---
   // sin/cos convert "compass angle" into an east/north direction vector.

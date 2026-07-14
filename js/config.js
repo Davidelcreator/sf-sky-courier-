@@ -42,6 +42,11 @@ export const PHYSICS = {
   MAX_SPEED: 268,     // top forward speed (268 m/s ≈ 600 mph!!)
   MAX_REVERSE: 12,    // top reverse speed
   TURN_RATE: 2.0,     // how fast the car turns (radians per second)
+  // Steering eases off at high speed so you don't swerve into buildings
+  // — like a real vehicle you can't yank the wheel on at full tilt.
+  TURN_EASE_ABOVE: 25, // m/s (~56 mph): below this, full steering; above,
+                       // it gradually softens.
+  TURN_EASE_RATE: 45,  // bigger = steering stays sharper at high speed.
 
   DRAG: 0.35,         // air resistance along the direction you're facing.
                       // Bigger = the car coasts to a stop sooner.
