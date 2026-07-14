@@ -247,15 +247,14 @@ export const BRIDGES = [
     name: 'Bay Bridge — west span',
     color: 0xb8bcc4,            // silver-gray steel
     deckHeight: 67,
-    towerHeight: 158,
-    drawTowers: true,           // no 3D towers in the map data here
-    // Centerline from the actual I-80 roadway nodes in OSM (way 8921938).
-    // Towers interpolated exactly ALONG that centerline (two per
-    // suspension span, straddling the central anchorage at the midpoint)
-    // so they line up with the road instead of sitting beside it.
+    towerHeight: 160,
+    // OSM already renders the two real west-span towers as gray buildings,
+    // so we DON'T draw our own (that caused duplicate towers) — we just
+    // drape the cables over the real tower positions.
+    drawTowers: false,
     towers: [
-      [-122.3869343, 37.7897352], [-122.3816191, 37.7946986],
-      [-122.3760729, 37.7998779], [-122.3707576, 37.8048412],
+      [-122.38582, 37.79075],   // SW main tower (from OSM building)
+      [-122.36990, 37.80562],   // NE main tower (from OSM building)
     ],
     cableAnchors: [[-122.3894763, 37.7873614], [-122.3682156, 37.8072151]],
     deck: [
@@ -270,9 +269,9 @@ export const BRIDGES = [
     color: 0xf2f2f2,            // the new span's white tower
     deckHeight: 25,
     towerHeight: 160,
-    drawTowers: true,
-    // Centerline from the actual I-80 roadway nodes in OSM (way 237731428).
-    towers: [[-122.3579449, 37.8151064]], // single SAS tower
+    // OSM renders the real single SAS tower — use it, don't duplicate it.
+    drawTowers: false,
+    towers: [[-122.35851, 37.81527]], // the real OSM tower position
     cableAnchors: [[-122.3606373, 37.8133549], [-122.3552524, 37.8168580]],
     piers: true,
     deck: [
