@@ -116,6 +116,28 @@ export const GAME = {
   CAR_SCALE: 1.8,      // 1 = realistic car size; bigger is easier to see
 };
 
+// Satellite imagery base. Free ESRI "World Imagery" tiles (no API key)
+// give real aerial detail — rooftops, trees, water color. Toggle in-game
+// with B (or the MAP button). When on, we hide the flat vector map fills
+// so the photo shows through, keeping roads, labels and 3D buildings.
+export const SATELLITE = {
+  ON_AT_START: true,
+  TILES: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  ATTRIBUTION: 'Imagery © Esri, Maxar, Earthstar Geographics',
+};
+
+// Building colors, by height (meters). MapLibre blends smoothly between
+// these stops, so a city block becomes a warm-to-cool gradient instead
+// of flat gray. Tweak the hex colors to taste.
+export const BUILDING_COLORS = [
+  [0,   '#c98a5e'],   // low-rise: warm terracotta
+  [12,  '#d8b48a'],   // sandy
+  [30,  '#a9c090'],   // sage green
+  [60,  '#8fb0c8'],   // steel blue
+  [120, '#6d7fb0'],   // indigo
+  [250, '#9a6fb0'],   // violet for the tallest towers
+];
+
 // Real 3D terrain: hills, mountains, valleys. Elevation tiles ("DEM" =
 // digital elevation model) are free from AWS's open-data mirror of the
 // Mapzen "terrarium" dataset — pixel colors encode ground height.
@@ -260,5 +282,20 @@ export const TREE_SPOTS = [
   { name: 'Palace of Fine Arts',    center: [-122.4484, 37.8029], radius: 90,  count: 30,  baseAlt: 4 },
   { name: 'Presidio forest',        center: [-122.4640, 37.7945], radius: 350, count: 150, baseAlt: 60 },
   { name: 'Golden Gate Park east',  center: [-122.4700, 37.7695], radius: 300, count: 130, baseAlt: 70 },
+  { name: 'Golden Gate Park mid',   center: [-122.4830, 37.7690], radius: 300, count: 130, baseAlt: 55 },
   { name: 'Golden Gate Park west',  center: [-122.4950, 37.7690], radius: 300, count: 130, baseAlt: 15 },
+  { name: 'Lincoln Park',           center: [-122.4990, 37.7830], radius: 220, count: 80,  baseAlt: 60 },
+  { name: 'Buena Vista Park',       center: [-122.4410, 37.7690], radius: 150, count: 70,  baseAlt: 100 },
+  { name: 'Dolores Park',           center: [-122.4270, 37.7596], radius: 120, count: 40,  baseAlt: 20 },
+  { name: 'McLaren Park',           center: [-122.4200, 37.7190], radius: 350, count: 130, baseAlt: 90 },
+  { name: 'Mount Sutro forest',     center: [-122.4570, 37.7580], radius: 300, count: 160, baseAlt: 200 },
+  { name: 'Glen Canyon',            center: [-122.4430, 37.7400], radius: 200, count: 90,  baseAlt: 100 },
+  { name: 'Sutro Heights',          center: [-122.5100, 37.7780], radius: 120, count: 45,  baseAlt: 45 },
+  { name: 'Yerba Buena Island',     center: [-122.3640, 37.8080], radius: 250, count: 90,  baseAlt: 40 },
+  { name: 'Treasure Island',        center: [-122.3720, 37.8230], radius: 250, count: 60,  baseAlt: 3 },
 ];
+
+// Bushes: low, dense shrubs scattered through the same parks (and any
+// extra green patches). They read as ground cover next to the trees.
+// `mult` scales how many bushes per tree-spot count.
+export const BUSH_MULT = 1.6;

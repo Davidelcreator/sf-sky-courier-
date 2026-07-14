@@ -22,7 +22,8 @@ import * as THREE from 'three';
 // stale half of the game. (Browsers cache each file separately, which is
 // what makes "the new button does nothing" bugs happen.)
 const V = new URL(import.meta.url).search;
-const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES } =
+const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
+        SATELLITE, BUILDING_COLORS, BUSH_MULT } =
   await import('./config.js' + V);
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
@@ -122,13 +123,13 @@ map.on('load', () => {
       type: 'fill-extrusion',
       minzoom: 13,
       paint: {
-        // Taller buildings get a slightly cooler color. "coalesce" means
-        // "use render_height, or 0 if the building has no height data".
+        // Color by height. We build a MapLibre "interpolate" expression
+        // from the BUILDING_COLORS list in config.js: it blends smoothly
+        // between the color stops based on each building's render_height.
+        // ("coalesce" means "use render_height, or 0 if it's missing".)
         'fill-extrusion-color': [
           'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 0],
-          0, '#dfe4ec',
-          60, '#c3cede',
-          150, '#a4b3cf',
+          ...BUILDING_COLORS.flat(),
         ],
         'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 5],
         'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
@@ -155,7 +156,55 @@ map.on('load', () => {
     });
     map.setTerrain({ source: 'terrain-dem', exaggeration: TERRAIN.EXAGGERATION });
   }
+
+  // --- Satellite imagery base ---
+  // Add the aerial photo as a raster layer near the BOTTOM of the stack
+  // (just above the plain background), so roads, labels and buildings
+  // still draw on top of it. It starts hidden; setBasemap() reveals it.
+  map.addSource('satellite', {
+    type: 'raster',
+    tiles: [SATELLITE.TILES],
+    tileSize: 256,
+    maxzoom: 19,
+    attribution: SATELLITE.ATTRIBUTION,
+  });
+  const firstAboveBackground = map.getStyle().layers.find((l) => l.type !== 'background')?.id;
+  map.addLayer(
+    { id: 'satellite', type: 'raster', source: 'satellite',
+      layout: { visibility: 'none' }, paint: { 'raster-opacity': 1 } },
+    firstAboveBackground,
+  );
+
+  setBasemap(SATELLITE.ON_AT_START);
 });
+
+// Switch between the drawn vector map and the satellite photo. In
+// satellite mode we hide the flat colored fills (land, water, parks) so
+// the photo shows through — but keep roads (lines), labels (symbols) and
+// our 3D buildings. Flipping back just makes those fills visible again.
+let hiddenForSatellite = [];
+function setBasemap(satelliteOn) {
+  if (!map.getLayer('satellite')) return;
+  state.satellite = satelliteOn;
+
+  if (satelliteOn) {
+    map.setLayoutProperty('satellite', 'visibility', 'visible');
+    hiddenForSatellite = [];
+    for (const layer of map.getStyle().layers) {
+      if (layer.id === 'satellite' || layer.id === '3d-buildings') continue;
+      if (layer.type === 'background' || layer.type === 'fill') {
+        map.setLayoutProperty(layer.id, 'visibility', 'none');
+        hiddenForSatellite.push(layer.id);
+      }
+    }
+  } else {
+    map.setLayoutProperty('satellite', 'visibility', 'none');
+    for (const id of hiddenForSatellite) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'visible');
+    }
+    hiddenForSatellite = [];
+  }
+}
 
 // Ground elevation (meters above sea level) at a point. Returns the
 // fallback when terrain is off or that area's elevation tiles haven't
@@ -202,6 +251,7 @@ const state = {
   camPitch: CAMERA.MODES[0].pitch, // preset's values smoothly, no hard cuts
   zoomNudge: 0,         // extra zoom from the mouse wheel, -1..1
   vehicle: 0,           // which VEHICLES entry we're driving
+  satellite: SATELLITE.ON_AT_START, // aerial photo base vs drawn map
 };
 
 // The ACTIVE physics numbers: the defaults, with the current vehicle's
@@ -446,6 +496,21 @@ window.addEventListener('keydown', (e) => {
 document.getElementById('btn-veh').addEventListener('pointerdown', (e) => {
   e.preventDefault();
   if (state.running) switchVehicle();
+});
+
+// --- Basemap toggle (satellite photo <-> drawn map) ---
+function toggleBasemap() {
+  setBasemap(!state.satellite);
+  flashMessage(state.satellite ? 'SATELLITE' : 'MAP VIEW', 1200);
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyB' && state.running) toggleBasemap();
+});
+
+document.getElementById('btn-map').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (state.running) toggleBasemap();
 });
 
 // --- Reset key ---
@@ -846,6 +911,49 @@ function buildTrees() {
   return group;
 }
 
+// Bushes: low, dense shrubs — a single InstancedMesh of small green
+// blobs sitting on the ground through the same parks, so the greenery
+// reads as full ground cover next to the taller trees.
+function buildBushes() {
+  const total = Math.round(
+    TREE_SPOTS.reduce((sum, s) => sum + s.count, 0) * BUSH_MULT);
+
+  const bushes = new THREE.InstancedMesh(
+    new THREE.IcosahedronGeometry(1.1, 0),  // small + low-poly = cheap
+    new THREE.MeshLambertMaterial({ color: 0xffffff }), // white × per-bush tint
+    total,
+  );
+
+  // A different seed than the trees, so bushes don't stack on trunks.
+  const rand = mulberry32(1337);
+  const matrix = new THREE.Matrix4();
+  const quat = new THREE.Quaternion();
+  const color = new THREE.Color();
+  let i = 0;
+
+  for (const spot of TREE_SPOTS) {
+    const center = toScene(spot.center[0], spot.center[1], spot.baseAlt ?? 0);
+    const bushCount = Math.round(spot.count * BUSH_MULT);
+    for (let n = 0; n < bushCount && i < total; n++, i++) {
+      const ang = rand() * Math.PI * 2;
+      const r = spot.radius * Math.sqrt(rand());
+      const x = center.x + Math.cos(ang) * r;
+      const z = center.z + Math.sin(ang) * r;
+      const s = 0.6 + rand() * 1.1;
+      // Squash slightly so bushes are wider than tall.
+      matrix.compose(new THREE.Vector3(x, center.y + 0.8 * s, z), quat,
+                     new THREE.Vector3(s * 1.3, s, s * 1.3));
+      bushes.setMatrixAt(i, matrix);
+      bushes.setColorAt(i, color.setHSL(0.27 + rand() * 0.08, 0.5, 0.25 + rand() * 0.12));
+    }
+  }
+  bushes.count = i; // in case rounding left a few unused slots
+
+  const group = new THREE.Group();
+  group.add(bushes);
+  return group;
+}
+
 // This object is MapLibre's "custom layer" — it has two jobs:
 // onAdd() builds the scene once; render() draws it every frame.
 const gameLayer = {
@@ -897,10 +1005,11 @@ const gameLayer = {
     three.ring = ring;
     three.scene.add(beaconGroup);
 
-    // Scenery: the bridges and park trees never move, so we build them
-    // once here and never touch them again.
+    // Scenery: the bridges, trees and bushes never move, so we build
+    // them once here and never touch them again.
     three.scene.add(buildBridges());
     three.scene.add(buildTrees());
+    three.scene.add(buildBushes());
 
     // Fake drop-shadow: a dark circle on the ground under the car.
     // It fades and spreads as you climb — a surprisingly important cue
