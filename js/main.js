@@ -970,6 +970,42 @@ function buildBeacon() {
   return { beaconGroup, beamMaterial, ring };
 }
 
+// Bridge deck segments in lng/lat, each end tagged with its height — used
+// by the physics (so you can land on and drive across decks) and traffic
+// (so cars ride up onto the bridges). Built once from the config.
+const bridgeSegments = (() => {
+  const segs = [];
+  for (const b of BRIDGES) {
+    const pts = b.deck.map((p, i) => ({
+      lng: p[0], lat: p[1],
+      h: (i === 0 || i === b.deck.length - 1) ? (p[2] ?? 1) : b.deckHeight,
+    }));
+    for (let i = 0; i < pts.length - 1; i++) segs.push({ a: pts[i], b: pts[i + 1] });
+  }
+  return segs;
+})();
+const BRIDGE_HALF_WIDTH = 13; // metres from the centreline that still counts as "on the deck"
+
+// Height of the bridge deck at a point, or null if you're not over one.
+// Interpolates along each segment, so ramps give a smooth slope.
+function bridgeDeckHeightAt(lng, lat) {
+  const mLng = METERS_PER_DEG_LAT * Math.cos(lat * DEG);
+  let best = null;
+  for (const s of bridgeSegments) {
+    const abx = (s.b.lng - s.a.lng) * mLng, aby = (s.b.lat - s.a.lat) * METERS_PER_DEG_LAT;
+    const apx = (lng - s.a.lng) * mLng, apy = (lat - s.a.lat) * METERS_PER_DEG_LAT;
+    const len2 = abx * abx + aby * aby;
+    let t = len2 > 0 ? (apx * abx + apy * aby) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const dx = apx - abx * t, dy = apy - aby * t;
+    if (dx * dx + dy * dy < BRIDGE_HALF_WIDTH * BRIDGE_HALF_WIDTH) {
+      const h = s.a.h + (s.b.h - s.a.h) * t;
+      if (best === null || h > best) best = h;
+    }
+  }
+  return best;
+}
+
 // Build the bridges from simple shapes at real OSM coordinates.
 // Everything is in scene coordinates (meters), so plain vector math
 // works: decks are boxes laid point-to-point, towers are boxes standing
@@ -978,6 +1014,10 @@ function buildBridges() {
   const group = new THREE.Group();
   const deckMat = new THREE.MeshLambertMaterial({ color: 0x454b54 });
   const pierMat = new THREE.MeshLambertMaterial({ color: 0x8a8f98 });
+  const medianMat = new THREE.MeshLambertMaterial({ color: 0xd9c25a }); // yellow divider
+  const poleMat = new THREE.MeshLambertMaterial({ color: 0x2b2f36 });
+  const lampMat = new THREE.MeshBasicMaterial({ color: 0xfff0c0 });     // glowing lamp head
+  const polePositions = []; // lamp-post bases, collected across every bridge
 
   for (const b of BRIDGES) {
     const mat = new THREE.MeshLambertMaterial({ color: b.color });
@@ -1000,6 +1040,23 @@ function buildBridges() {
       // also tilts the ramp segments to their correct slope for free.
       slab.lookAt(c);
       group.add(slab);
+
+      // Yellow median divider down the centre, sitting on the deck.
+      const median = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1, len), medianMat);
+      median.position.copy(slab.position); median.position.y += 2.3;
+      median.rotation.copy(slab.rotation);
+      group.add(median);
+
+      // Lamp-post bases along both edges at intervals.
+      const along = c.clone().sub(a).normalize();
+      const across = new THREE.Vector3(-along.z, 0, along.x);
+      const nPoles = Math.floor(len / 85);
+      for (let k = 1; k <= nPoles; k++) {
+        const base = a.clone().lerp(c, k / (nPoles + 1));
+        for (const side of [-1, 1]) {
+          polePositions.push(base.clone().add(across.clone().multiplyScalar(10.5 * side)));
+        }
+      }
 
       // Support piers under the elevated stretches.
       if (b.piers) {
@@ -1073,6 +1130,23 @@ function buildBridges() {
         group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 32, 0.8, 6), mat));
       }
     }
+  }
+
+  // Lamp posts (one InstancedMesh for the shafts, one for the glowing
+  // heads) — cheap even though there are hundreds across all the bridges.
+  if (polePositions.length) {
+    const poles = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.25, 0.35, 9, 6), poleMat, polePositions.length);
+    const lamps = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(0.75, 8, 6), lampMat, polePositions.length);
+    const m = new THREE.Matrix4();
+    polePositions.forEach((p, i) => {
+      m.makeTranslation(p.x, p.y + 4.5, p.z);  // 9 m shaft, centred at +4.5
+      poles.setMatrixAt(i, m);
+      m.makeTranslation(p.x, p.y + 9.2, p.z);   // glowing head on top
+      lamps.setMatrixAt(i, m);
+    });
+    group.add(poles, lamps);
   }
   return group;
 }
@@ -1434,8 +1508,10 @@ function updateTraffic(dt, nowMs) {
     // Cars far from the player get recycled onto a nearby road.
     if (metersBetween(lng, lat, car.lng, car.lat) > 1400) { c.road = null; c.mesh.visible = false; continue; }
 
-    const ground = groundAt(lng, lat, 0);
-    const p = toScene(lng, lat, Math.max(0, ground) + 1);
+    // Ride up onto a bridge deck if this bit of road crosses one.
+    const deckH = bridgeDeckHeightAt(lng, lat);
+    const y = deckH !== null ? deckH : Math.max(0, groundAt(lng, lat, 0));
+    const p = toScene(lng, lat, y + 1);
     c.mesh.position.copy(p);
     const dx = (b[0] - a[0]) * Math.cos(lat * DEG);
     const dy = b[1] - a[1];
@@ -1671,7 +1747,12 @@ function updatePhysics(dt) {
   // The lowest we can go: divers (the UFO) sink to the real sea floor;
   // everything else stops at the water surface (sea level, 0).
   const canDive = VEHICLES[state.vehicle].canDive;
-  const floorAlt = canDive ? car.ground : Math.max(0, car.ground);
+  let floorAlt = canDive ? car.ground : Math.max(0, car.ground);
+  // Bridge decks are SOLID: if you're at or above the deck here, it
+  // becomes the floor, so you land on it and drive across (instead of
+  // falling through to the water). Below the deck you can still fly under.
+  const deckH = bridgeDeckHeightAt(car.lng, car.lat);
+  if (deckH !== null && car.alt >= deckH - 3) floorAlt = Math.max(floorAlt, deckH);
   const onGround = car.alt < floorAlt + 1;
   const grip = onGround ? phys.GRIP_GROUND : phys.GRIP_AIR;
   sideSpeed *= Math.exp(-grip * dt);
