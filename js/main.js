@@ -1138,16 +1138,71 @@ function buildBushes() {
 // it puts you underwater. It follows the car so it always fills the view.
 const WATER_LEVEL = -5; // metres below sea level the water sheet sits at
 
-function buildWater() {
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(80000, 80000),
-    new THREE.MeshBasicMaterial({
-      // Fairly opaque so you don't see roads/terrain sitting on the sea
-      // floor through the water from above; still reads as water.
-      color: 0x1f6a90, transparent: true, opacity: 0.8,
+// The animated water shader: layered sine "waves" over the surface make
+// it ripple and shimmer, and the brightest crests catch a warm sun
+// "glint". It only needs each pixel's world position + a time value, so
+// it works fine with our MapLibre-driven camera. (Low quality skips it
+// for a plain flat sheet.)
+function makeWaterMaterial() {
+  if (!gfx().waterReflect) {
+    return new THREE.MeshBasicMaterial({
+      color: 0x1f6a90, transparent: true, opacity: 0.82,
       side: THREE.DoubleSide, depthWrite: false,
-    }),
-  );
+    });
+  }
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: {
+      uTime: { value: 0 },
+      uDeep: { value: new THREE.Color(0x114f74) },
+      uShallow: { value: new THREE.Color(0x3f9dc2) },
+      uSun: { value: new THREE.Color(0xffe4b0) },
+      uOpacity: { value: 0.85 },
+    },
+    vertexShader: `
+      varying vec3 vWorld;
+      void main() {
+        vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      uniform float uTime;
+      uniform vec3 uDeep, uShallow, uSun;
+      uniform float uOpacity;
+      varying vec3 vWorld;
+
+      float hash(vec2 x){ return fract(sin(dot(x, vec2(127.1, 311.7))) * 43758.5453123); }
+      float noise(vec2 x){
+        vec2 i = floor(x), f = fract(x);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash(i), b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+
+      void main() {
+        vec2 p = vWorld.xz;
+        // Gentle broad colour undulation across the bay.
+        float broad = noise(p * 0.004 + uTime * 0.05);
+        vec3 col = mix(uDeep, uShallow, broad * 0.5);
+        // Sun glitter: two drifting NOISE fields (so it's irregular, not a
+        // grid), high-passed so only the bright peaks sparkle.
+        float s = noise(p * 0.06 + vec2(uTime * 0.35, uTime * 0.20))
+                + noise(p * 0.14 - vec2(uTime * 0.28, uTime * 0.18)) * 0.7;
+        float glint = smoothstep(1.32, 1.62, s);
+        col += uSun * glint * 0.5;
+        gl_FragColor = vec4(col, uOpacity);
+      }
+    `,
+  });
+  three.waterMaterial = mat; // so the game loop can advance its clock
+  return mat;
+}
+
+function buildWater() {
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(80000, 80000), makeWaterMaterial());
   water.rotation.x = -Math.PI / 2; // lay it flat
   water.renderOrder = -1;          // draw beneath the other scene objects
   three.water = water;
@@ -1390,6 +1445,7 @@ function updateSceneObjects(timeSeconds) {
   if (three.water) {
     const w = toScene(car.lng, car.lat, 0);
     three.water.position.set(w.x, WATER_LEVEL, w.z);
+    if (three.waterMaterial) three.waterMaterial.uniforms.uTime.value = timeSeconds;
   }
 
   // --- Beacon at the current target, standing on its terrain ---
