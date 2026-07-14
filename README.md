@@ -16,6 +16,8 @@ solid until you climb above their roofs — and yes, you can land on them.
 | `A` `D` / `←` `→` | Steer                |
 | `SPACE` (hold) | Upward thrust — fly!    |
 | `G`            | Toggle HOVER / GLIDE flight |
+| `C`            | Cycle camera angle (chase, close, sky, top-down, cinema) |
+| mouse wheel    | Zoom the camera in/out  |
 | `R`            | Reset back to the start |
 
 In **GLIDE** mode your forward speed generates lift, so at full speed

@@ -66,12 +66,20 @@ export const PHYSICS = {
 };
 
 // Chase camera: follows behind and above the car, looking forward.
+// Press C (or the CAM button) in-game to cycle through MODES.
+//   zoom  = how close the camera sits (higher = closer)
+//   pitch = camera tilt in degrees (0 = looking straight down,
+//           90 = looking flat at the horizon)
 export const CAMERA = {
-  ZOOM: 17.3,   // how close the camera sits (higher = closer)
-  PITCH: 72,    // camera tilt in degrees (0 = looking straight down,
-                // 90 = looking flat at the horizon)
   SMOOTH: 4,    // how quickly the camera swings around when you turn.
                 // Bigger = snappier, smaller = lazier.
+  MODES: [
+    { name: 'CHASE',    zoom: 17.3, pitch: 72 },  // the classic
+    { name: 'CLOSE',    zoom: 17.9, pitch: 68 },  // right on the bumper
+    { name: 'SKY VIEW', zoom: 16.4, pitch: 55 },  // high + wide, for navigating
+    { name: 'TOP-DOWN', zoom: 16.6, pitch: 15 },  // like the paper map
+    { name: 'CINEMA',   zoom: 17.6, pitch: 78 },  // low drama, big horizon
+  ],
 };
 
 export const GAME = {

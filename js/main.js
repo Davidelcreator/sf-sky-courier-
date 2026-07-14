@@ -188,6 +188,10 @@ const state = {
   targetIndex: 0,       // which BEACONS entry we're delivering to
   camHeading: START.heading, // camera direction (lags behind the car)
   flightMode: 'hover',  // 'hover' (thrust vs gravity) or 'glide' (wings!)
+  cameraMode: 0,        // which CAMERA.MODES preset is active
+  camZoom: CAMERA.MODES[0].zoom,   // current zoom/pitch — these chase the
+  camPitch: CAMERA.MODES[0].pitch, // preset's values smoothly, no hard cuts
+  zoomNudge: 0,         // extra zoom from the mouse wheel, -1..1
 };
 
 // Handy while learning: open the browser console (F12) and type
@@ -337,6 +341,28 @@ document.getElementById('btn-mode').addEventListener('pointerdown', (e) => {
   e.preventDefault();
   if (state.running) toggleFlightMode();
 });
+
+// --- Camera angle ---
+// C key (or the CAM button) cycles through the presets in config.js;
+// the mouse wheel nudges the zoom within any preset.
+function cycleCamera() {
+  state.cameraMode = (state.cameraMode + 1) % CAMERA.MODES.length;
+  flashMessage(`CAMERA: ${CAMERA.MODES[state.cameraMode].name}`, 1200);
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyC' && state.running) cycleCamera();
+});
+
+document.getElementById('btn-cam').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (state.running) cycleCamera();
+});
+
+window.addEventListener('wheel', (e) => {
+  // deltaY is positive when scrolling down/away → zoom out.
+  state.zoomNudge = Math.max(-1, Math.min(1, state.zoomNudge - e.deltaY * 0.001));
+}, { passive: true });
 
 // --- Reset key ---
 // Stranded in the bay? Press R to teleport back to the start.
@@ -1068,12 +1094,19 @@ function updateChaseCamera(dt) {
   while (diff < -Math.PI) diff += 2 * Math.PI;
   state.camHeading += diff * (1 - Math.exp(-CAMERA.SMOOTH * dt));
 
+  // Glide zoom and pitch toward the active preset (plus any mouse-wheel
+  // nudge) instead of jump-cutting — same easing trick as the heading.
+  const mode = CAMERA.MODES[state.cameraMode];
+  const ease = 1 - Math.exp(-3 * dt);
+  state.camZoom += (mode.zoom + state.zoomNudge - state.camZoom) * ease;
+  state.camPitch += (mode.pitch - state.camPitch) * ease;
+
   map.jumpTo({
     center: [car.lng, car.lat],
     elevation: car.alt,               // aim at the car's altitude, not the ground
     bearing: state.camHeading / DEG,  // radians → degrees
-    pitch: CAMERA.PITCH,
-    zoom: CAMERA.ZOOM,
+    pitch: state.camPitch,
+    zoom: state.camZoom,
     // Reserving screen space at the top nudges the car toward the
     // bottom third of the screen, so you see the road AHEAD of you.
     padding: { top: Math.round(window.innerHeight * 0.45) },

@@ -62,7 +62,8 @@
     <div id="help" class="panel">
       W / &#8593; drive &nbsp;&bull;&nbsp; S / &#8595; brake &nbsp;&bull;&nbsp;
       A D / &#8592; &#8594; steer &nbsp;&bull;&nbsp; hold SPACE to fly
-      &nbsp;&bull;&nbsp; G glide/hover &nbsp;&bull;&nbsp; R reset
+      &nbsp;&bull;&nbsp; G glide/hover &nbsp;&bull;&nbsp; C camera
+      &nbsp;&bull;&nbsp; R reset
     </div>
 
     <!-- On-screen controls for phones/tablets. Hidden on desktop;
@@ -73,8 +74,10 @@
       <div id="joystick">
         <div id="joystick-knob"></div>
       </div>
-      <!-- Right: tap MODE to switch hover/glide, hold FLY to thrust. -->
+      <!-- Right: tap CAM to change camera, MODE to switch hover/glide,
+           hold FLY to thrust. -->
       <div id="touch-right">
+        <button class="tbtn" id="btn-cam">&#127909; CAM</button>
         <button class="tbtn" id="btn-mode">MODE</button>
         <button class="tbtn" id="btn-fly">FLY</button>
       </div>
