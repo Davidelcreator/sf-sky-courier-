@@ -37,14 +37,17 @@ export const BEACONS = [
 // Physics constants. Units are meters and seconds (m/s, m/s²).
 // These are "arcade" values — a real car can't do any of this.
 export const PHYSICS = {
-  ACCEL: 60,          // forward acceleration when holding W (m/s²)
-  BRAKE: 70,          // braking/reverse acceleration when holding S
-  MAX_SPEED: 110,     // top forward speed (110 m/s ≈ 246 mph!)
+  ACCEL: 100,         // forward acceleration when holding W (m/s²)
+  BRAKE: 130,         // braking/reverse acceleration when holding S
+  MAX_SPEED: 268,     // top forward speed (268 m/s ≈ 600 mph!!)
   MAX_REVERSE: 12,    // top reverse speed
   TURN_RATE: 2.0,     // how fast the car turns (radians per second)
 
-  DRAG: 0.5,          // air resistance along the direction you're facing.
+  DRAG: 0.35,         // air resistance along the direction you're facing.
                       // Bigger = the car coasts to a stop sooner.
+                      // Physics note: drag grows with speed, so your real
+                      // top speed is ACCEL ÷ DRAG (here 100/0.35 ≈ 285) —
+                      // keep that above MAX_SPEED or the cap is unreachable.
   GRIP_GROUND: 3.5,   // how strongly sideways sliding is cancelled on the
                       // ground. Bigger = grippier, smaller = drifty.
   GRIP_AIR: 1.0,      // same, but while flying (floatier on purpose)
@@ -76,3 +79,42 @@ export const GAME = {
   POINTS: 100,         // points per delivery
   CAR_SCALE: 1.8,      // 1 = realistic car size; bigger is easier to see
 };
+
+// 3D suspension bridges, built from simple shapes at real coordinates
+// (the map data only draws bridges as flat roads — no towers/cables).
+// "ends" are the two shore points of the span; towers and cable anchors
+// sit at fractions (0..1) along that line, so everything stays straight.
+export const BRIDGES = [
+  {
+    name: 'Golden Gate Bridge',
+    color: 0xd1451e,            // International Orange, its real paint!
+    ends: [[-122.4760, 37.8070], [-122.4800, 37.8300]],
+    towerPositions: [0.28, 0.72],
+    anchorPositions: [0.05, 0.95],
+    towerHeight: 227,           // real: 227 m above the water
+    deckHeight: 67,             // real: the roadway is ~67 m up
+  },
+  {
+    name: 'Bay Bridge (west span)',
+    color: 0xb8bcc4,            // silver-gray steel
+    ends: [[-122.3872, 37.7866], [-122.3655, 37.8107]],
+    towerPositions: [0.3, 0.7],
+    anchorPositions: [0.05, 0.95],
+    towerHeight: 158,
+    deckHeight: 67,
+  },
+];
+
+// Trees! Each spot scatters `count` simple trees within `radius` meters
+// of a real park's center. Add your favorite park — any [lng, lat] works.
+export const TREE_SPOTS = [
+  { name: 'Rincon Park',            center: [-122.3905, 37.7901], radius: 90,  count: 20 },
+  { name: 'Sue Bierman Park',       center: [-122.3952, 37.7957], radius: 100, count: 35 },
+  { name: 'Washington Square',      center: [-122.4103, 37.8005], radius: 80,  count: 30 },
+  { name: 'Alamo Square',           center: [-122.4345, 37.7764], radius: 100, count: 40 },
+  { name: 'Marina Green',           center: [-122.4430, 37.8055], radius: 120, count: 25 },
+  { name: 'Palace of Fine Arts',    center: [-122.4484, 37.8029], radius: 90,  count: 30 },
+  { name: 'Presidio forest',        center: [-122.4640, 37.7945], radius: 350, count: 150 },
+  { name: 'Golden Gate Park east',  center: [-122.4700, 37.7695], radius: 300, count: 130 },
+  { name: 'Golden Gate Park west',  center: [-122.4950, 37.7690], radius: 300, count: 130 },
+];

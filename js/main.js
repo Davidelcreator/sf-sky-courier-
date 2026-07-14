@@ -14,7 +14,7 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { START, BEACONS, PHYSICS, CAMERA, GAME } from './config.js';
+import { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS } from './config.js';
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
 const maplibregl = window.maplibregl;
@@ -344,6 +344,7 @@ const three = {
   ring: null,
   shadow: null,
 };
+window.game.three = three; // peek at the 3D scene from the console
 
 // Convert a real-world position into our meters-based scene coordinates.
 function toScene(lng, lat, altMeters) {
@@ -456,6 +457,149 @@ function buildBeacon() {
   return { beaconGroup, beamMaterial, ring };
 }
 
+// Build the suspension bridges from simple shapes. Everything is done
+// in scene coordinates (meters), so we can use plain vector math:
+// towers are boxes standing on the span line, cables are tubes bent
+// along curves between the tower tops.
+function buildBridges() {
+  const group = new THREE.Group();
+
+  for (const b of BRIDGES) {
+    const mat = new THREE.MeshLambertMaterial({ color: b.color });
+    const deckMat = new THREE.MeshLambertMaterial({ color: 0x454b54 });
+
+    // The two shore points, as positions in our meters-based scene.
+    const endA = toScene(b.ends[0][0], b.ends[0][1], 0);
+    const endB = toScene(b.ends[1][0], b.ends[1][1], 0);
+    const spanLength = endA.distanceTo(endB);
+
+    // along = unit vector pointing down the bridge; across = 90° from it.
+    const along = endB.clone().sub(endA).normalize();
+    const across = new THREE.Vector3(-along.z, 0, along.x);
+    // How much to rotate a box so its length lies along the bridge.
+    const angleY = Math.atan2(along.x, along.z);
+
+    // A point at fraction t along the span, at a given height.
+    const at = (t, y) => endA.clone().lerp(endB, t).setY(y);
+
+    // --- Towers: two legs + three crossbeams each ---
+    const legGeo = new THREE.BoxGeometry(5, b.towerHeight, 5);
+    const beamGeo = new THREE.BoxGeometry(21, 4, 4);
+    for (const t of b.towerPositions) {
+      const tower = new THREE.Group();
+      for (const side of [-1, 1]) {
+        const leg = new THREE.Mesh(legGeo, mat);
+        leg.position.set(9 * side, b.towerHeight / 2, 0);
+        tower.add(leg);
+      }
+      for (const beamY of [b.deckHeight, b.towerHeight * 0.72, b.towerHeight * 0.97]) {
+        const beam = new THREE.Mesh(beamGeo, mat);
+        beam.position.y = beamY;
+        tower.add(beam);
+      }
+      tower.position.copy(at(t, 0));
+      // Towers stand ACROSS the bridge; rotate 90° past the span angle.
+      tower.rotation.y = angleY + Math.PI / 2;
+      group.add(tower);
+    }
+
+    // --- Main cables: one swoop per side of the roadway ---
+    const [tA, tB] = b.towerPositions;
+    const [aA, aB] = b.anchorPositions;
+    for (const side of [-1, 1]) {
+      const off = across.clone().multiplyScalar(9 * side);
+      const topA = at(tA, b.towerHeight).add(off);
+      const topB = at(tB, b.towerHeight).add(off);
+
+      // A bezier curve's middle is pulled toward its control point.
+      // Solving so the cable's low point lands just above the deck:
+      const sagY = 2 * (b.deckHeight + 4) - b.towerHeight;
+      const control = at((tA + tB) / 2, sagY).add(off);
+      const mainCurve = new THREE.QuadraticBezierCurve3(topA, control, topB);
+      group.add(new THREE.Mesh(new THREE.TubeGeometry(mainCurve, 40, 0.8, 6), mat));
+
+      // Side cables: tower tops down to the anchors at deck level.
+      for (const [tt, aa] of [[tA, aA], [tB, aB]]) {
+        const line = new THREE.LineCurve3(
+          at(tt, b.towerHeight).add(off),
+          at(aa, b.deckHeight).add(off),
+        );
+        group.add(new THREE.Mesh(new THREE.TubeGeometry(line, 2, 0.7, 6), mat));
+      }
+    }
+
+    // --- Deck: one long slab at roadway height ---
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(22, 3, spanLength), deckMat);
+    deck.position.copy(at(0.5, b.deckHeight - 1.5));
+    deck.rotation.y = angleY;
+    group.add(deck);
+  }
+  return group;
+}
+
+// A tiny seeded random-number generator. Unlike Math.random(), the same
+// seed always gives the same sequence — so every player's trees grow in
+// the same spots, every time the game loads.
+function mulberry32(seed) {
+  return function () {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Scatter simple trees (trunk + leafy blob) across the parks.
+// InstancedMesh draws ALL trunks in one GPU call and all canopies in
+// another — hundreds of trees for the price of two.
+function buildTrees() {
+  const total = TREE_SPOTS.reduce((sum, s) => sum + s.count, 0);
+
+  const trunks = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(0.3, 0.5, 3, 6),
+    new THREE.MeshLambertMaterial({ color: 0x6b4a2f }),
+    total,
+  );
+  const canopies = new THREE.InstancedMesh(
+    new THREE.IcosahedronGeometry(2.4, 1),
+    new THREE.MeshLambertMaterial({ color: 0xffffff }), // white × per-tree tint
+    total,
+  );
+
+  const rand = mulberry32(42);
+  const matrix = new THREE.Matrix4();
+  const quat = new THREE.Quaternion();
+  const color = new THREE.Color();
+  let i = 0;
+
+  for (const spot of TREE_SPOTS) {
+    const center = toScene(spot.center[0], spot.center[1], 0);
+    for (let n = 0; n < spot.count; n++, i++) {
+      // Random point in a circle. sqrt() makes the spread even —
+      // without it trees would crowd the center.
+      const ang = rand() * Math.PI * 2;
+      const r = spot.radius * Math.sqrt(rand());
+      const x = center.x + Math.cos(ang) * r;
+      const z = center.z + Math.sin(ang) * r;
+      const s = 0.7 + rand() * 0.9; // each tree its own size
+
+      matrix.compose(new THREE.Vector3(x, 1.5 * s, z), quat,
+                     new THREE.Vector3(s, s, s));
+      trunks.setMatrixAt(i, matrix);
+
+      matrix.compose(new THREE.Vector3(x, 4.4 * s, z), quat,
+                     new THREE.Vector3(s, s, s));
+      canopies.setMatrixAt(i, matrix);
+      // Each canopy gets its own shade of green.
+      canopies.setColorAt(i, color.setHSL(0.29 + rand() * 0.07, 0.55, 0.28 + rand() * 0.14));
+    }
+  }
+
+  const group = new THREE.Group();
+  group.add(trunks, canopies);
+  return group;
+}
+
 // This object is MapLibre's "custom layer" — it has two jobs:
 // onAdd() builds the scene once; render() draws it every frame.
 const gameLayer = {
@@ -497,6 +641,11 @@ const gameLayer = {
     three.beamMaterial = beamMaterial;
     three.ring = ring;
     three.scene.add(beaconGroup);
+
+    // Scenery: the bridges and park trees never move, so we build them
+    // once here and never touch them again.
+    three.scene.add(buildBridges());
+    three.scene.add(buildTrees());
 
     // Fake drop-shadow: a dark circle on the ground under the car.
     // It fades and spreads as you climb — a surprisingly important cue
@@ -685,12 +834,18 @@ window.game.step = updatePhysics;
 // car's pixel — we learned that the hard way.)
 
 let buildingSourceId = null;
-const buildingCache = { list: [], lastRefresh: -Infinity };
+const buildingCache = { list: [], lastRefresh: -Infinity, lng: null, lat: null };
 
 function refreshBuildingCache(nowMs) {
-  if (nowMs - buildingCache.lastRefresh < 1000) return; // once a second
+  // Refresh once a second — or sooner if the car has covered 150 m,
+  // so a 600 mph run can't outfly the collision data.
+  const moved = buildingCache.lng === null ? Infinity
+    : metersBetween(car.lng, car.lat, buildingCache.lng, buildingCache.lat);
+  if (nowMs - buildingCache.lastRefresh < 1000 && moved < 150) return;
   if (!buildingSourceId) return;
   buildingCache.lastRefresh = nowMs;
+  buildingCache.lng = car.lng;
+  buildingCache.lat = car.lat;
 
   // All building shapes in the map tiles currently loaded around us.
   const feats = map.querySourceFeatures(buildingSourceId, {
