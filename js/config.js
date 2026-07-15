@@ -218,6 +218,13 @@ export const LOOK = {
   waterSun: '#e8e4d8',
   waterOpacity: 0.85,
   waterGlint: 0.35,
+
+  // --- Aerial haze on our 3D objects ---
+  // Exponential fog so bridges/trees/traffic melt into the same warm-gray
+  // haze the map sky already paints at distance. 0.00028 ≈ half faded at
+  // 3 km, ghost silhouette at 5 km (measured from the reference),
+  // invisible under 300 m.
+  fogDensity: 0.00028,
 };
 
 // Satellite imagery base. Free ESRI "World Imagery" tiles (no API key)

@@ -349,6 +349,16 @@ function applyLook() {
     three.ambient.intensity = LOOK.threeAmbientIntensity;
   }
 
+  // Aerial haze on our own 3D objects: distant bridges/trees/traffic fade
+  // toward the same haze color the map sky uses, so both worlds agree.
+  if (three.scene) {
+    if (!three.scene.fog) three.scene.fog = new THREE.FogExp2(LOOK.fogColor, LOOK.fogDensity);
+    else {
+      three.scene.fog.color.set(LOOK.fogColor);
+      three.scene.fog.density = LOOK.fogDensity;
+    }
+  }
+
   // Water shader colors (medium/high quality; low's flat plane is set at build).
   if (three.waterMaterial) {
     const u = three.waterMaterial.uniforms;
@@ -396,6 +406,7 @@ const LOOK_PANEL = [
   ['waterSun', 'Water glint color', 'color'],
   ['waterOpacity', 'Water opacity', 0, 1, 0.01],
   ['waterGlint', 'Water glint strength', 0, 1, 0.01],
+  ['fogDensity', '3D haze density', 0, 0.002, 0.00001],
 ];
 
 let lookPanelEl = null;
