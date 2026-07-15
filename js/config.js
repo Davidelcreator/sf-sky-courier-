@@ -225,6 +225,16 @@ export const LOOK = {
   // 3 km, ghost silhouette at 5 km (measured from the reference),
   // invisible under 300 m.
   fogDensity: 0.00028,
+
+  // --- Foliage ---
+  // Real trees photograph OLIVE, not "game green": reference sample
+  // #5e5e40 has red ≈ green. Hue 0.17 (yellow-green), low saturation.
+  // Each tree/bush still varies around these base values.
+  treeHue: 0.17,
+  treeHueSpan: 0.05,
+  treeSat: 0.30,
+  treeLight: 0.28,
+  treeLightSpan: 0.12,
 };
 
 // Satellite imagery base. Free ESRI "World Imagery" tiles (no API key)

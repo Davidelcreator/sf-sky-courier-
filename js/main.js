@@ -359,6 +359,9 @@ function applyLook() {
     }
   }
 
+  // Foliage tint (trees + bushes) — live restyle of every instance.
+  retintFoliage();
+
   // Water shader colors (medium/high quality; low's flat plane is set at build).
   if (three.waterMaterial) {
     const u = three.waterMaterial.uniforms;
@@ -407,6 +410,11 @@ const LOOK_PANEL = [
   ['waterOpacity', 'Water opacity', 0, 1, 0.01],
   ['waterGlint', 'Water glint strength', 0, 1, 0.01],
   ['fogDensity', '3D haze density', 0, 0.002, 0.00001],
+  ['treeHue', 'Foliage hue', 0, 1, 0.005],
+  ['treeHueSpan', 'Foliage hue variety', 0, 0.2, 0.005],
+  ['treeSat', 'Foliage saturation', 0, 1, 0.01],
+  ['treeLight', 'Foliage lightness', 0.05, 0.6, 0.01],
+  ['treeLightSpan', 'Foliage light variety', 0, 0.3, 0.01],
 ];
 
 let lookPanelEl = null;
@@ -1531,15 +1539,36 @@ function buildTrees() {
       matrix.compose(new THREE.Vector3(x, center.y + 4.4 * s, z), quat,
                      new THREE.Vector3(s, s, s));
       canopies.setMatrixAt(i, matrix);
-      // Each canopy gets its own shade of green.
-      canopies.setColorAt(i, color.setHSL(0.29 + rand() * 0.07, 0.55, 0.28 + rand() * 0.14));
     }
   }
   trunks.count = i; canopies.count = i; // only render the instances we filled
 
+  // Canopy colors come from LOOK (see retintFoliage) so the P-panel
+  // sliders can restyle every tree live.
+  three.canopies = canopies;
+  retintFoliage();
+
   const group = new THREE.Group();
   group.add(trunks, canopies);
   return group;
+}
+
+// Color every tree canopy and bush from the LOOK foliage knobs. Its own
+// seeded random stream keeps the per-plant variety identical run to run.
+function retintFoliage() {
+  const color = new THREE.Color();
+  for (const [mesh, lightMult] of [[three.canopies, 1], [three.bushes, 0.9]]) {
+    if (!mesh) continue;
+    const rand = mulberry32(7331);
+    for (let i = 0; i < mesh.count; i++) {
+      mesh.setColorAt(i, color.setHSL(
+        LOOK.treeHue + rand() * LOOK.treeHueSpan,
+        LOOK.treeSat,
+        (LOOK.treeLight + rand() * LOOK.treeLightSpan) * lightMult,
+      ));
+    }
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }
 }
 
 // Bushes: low, dense shrubs — a single InstancedMesh of small green
@@ -1576,10 +1605,13 @@ function buildBushes() {
       matrix.compose(new THREE.Vector3(x, center.y + 0.8 * s, z), quat,
                      new THREE.Vector3(s * 1.3, s, s * 1.3));
       bushes.setMatrixAt(i, matrix);
-      bushes.setColorAt(i, color.setHSL(0.27 + rand() * 0.08, 0.5, 0.25 + rand() * 0.12));
     }
   }
   bushes.count = i; // in case rounding left a few unused slots
+
+  // Bush colors come from LOOK too (slightly darker than the trees).
+  three.bushes = bushes;
+  retintFoliage();
 
   const group = new THREE.Group();
   group.add(bushes);
