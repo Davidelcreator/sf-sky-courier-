@@ -249,6 +249,14 @@ export const LOOK = {
   // follow the sun position automatically.
   shadowOpacity: 0.30,
 
+  // --- Facade windows ---
+  // A second building layer overlays a tiled window-punch pattern on
+  // every wall, giving facades the floor/window rhythm the reference
+  // shows. 0 disables it entirely. (MapLibre scales patterns by zoom, so
+  // window size breathes a little as the camera zooms — judged
+  // acceptable; set 0 if it bothers you.)
+  windowOpacity: 0.38,
+
   // --- Camera texture: softness + grain ---
   // The reference is 1080p video of a neural render: slightly soft, with
   // mild luminance noise. A whisper of blur takes the razor-crisp "game

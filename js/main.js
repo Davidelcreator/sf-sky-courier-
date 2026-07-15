@@ -227,13 +227,48 @@ function initGame() {
     firstSymbolId,
   );
 
+  // --- Facade windows: a second extrusion layer with a window pattern ---
+  // A pattern REPLACES a layer's color, so the tinted buildings keep
+  // their own layer and this one overlays only the dark window punches
+  // (everything else in the tile is transparent, letting the tint show).
+  // The pattern is generated in code — no image files.
+  const win = document.createElement('canvas');
+  win.width = 12; win.height = 12;
+  const wctx = win.getContext('2d');
+  wctx.clearRect(0, 0, 12, 12);                  // transparent wall
+  wctx.fillStyle = 'rgba(25, 30, 40, 1)';        // dark glass punch
+  wctx.fillRect(2, 2, 6, 7);                     // one window per cell
+  map.addImage('window-grid', wctx.getImageData(0, 0, 12, 12), { pixelRatio: 1 });
+  map.addLayer(
+    {
+      id: '3d-buildings-windows',
+      source: buildingSourceId,
+      'source-layer': 'building',
+      type: 'fill-extrusion',
+      minzoom: 15,                               // skip far tiles — detail fades anyway
+      paint: {
+        'fill-extrusion-pattern': 'window-grid',
+        // 0.5 m SHORTER than the tint layer: its patterned roof face then
+        // hides below the tint layer's clean roof (depth test), so the
+        // windows appear on WALLS only — roofs stay plain.
+        'fill-extrusion-height': ['-', ['coalesce', ['get', 'render_height'], 5], 0.5],
+        'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+        'fill-extrusion-opacity': LOOK.windowOpacity,
+        'fill-extrusion-vertical-gradient': false, // gradient already on the tint layer
+      },
+    },
+    firstSymbolId,
+  );
+
   // Hide the tall gray boxes OSM extrudes for the Bay Bridge towers: we
   // draw nicer towers ourselves, and removing the blocks lets the roadway
   // run clear between/around them. We match by stable OSM feature id
   // because a location-based `within` filter proved unreliable here.
   // ['id'] is each feature's id; hide any whose id is in our list.
   if (OSM_HIDE_IDS && OSM_HIDE_IDS.length) {
-    map.setFilter('3d-buildings', ['!', ['in', ['id'], ['literal', OSM_HIDE_IDS]]]);
+    const hide = ['!', ['in', ['id'], ['literal', OSM_HIDE_IDS]]];
+    map.setFilter('3d-buildings', hide);
+    map.setFilter('3d-buildings-windows', hide);
   }
 
   // Our three.js layer (car, beacon) is added last so it draws with
@@ -381,6 +416,15 @@ function applyLook() {
   // next once-a-second rebuild).
   if (shadowState.mesh) shadowState.mesh.material.opacity = LOOK.shadowOpacity;
 
+  // Facade window strength (the pattern overlay layer).
+  try {
+    if (map.getLayer('3d-buildings-windows')) {
+      map.setPaintProperty('3d-buildings-windows', 'fill-extrusion-opacity', LOOK.windowOpacity);
+      map.setLayoutProperty('3d-buildings-windows', 'visibility',
+        LOOK.windowOpacity > 0 ? 'visible' : 'none');
+    }
+  } catch (e) {}
+
   // Water shader colors (medium/high quality; low's flat plane is set at build).
   if (three.waterMaterial) {
     const u = three.waterMaterial.uniforms;
@@ -466,6 +510,7 @@ const LOOK_PANEL = [
   ['treeTopLight', 'Canopy sunlit top ×', 1, 1.6, 0.02],
   ['treeUnderDark', 'Canopy shadow under ×', 0.4, 1, 0.02],
   ['shadowOpacity', 'Building shadow darkness', 0, 0.8, 0.01],
+  ['windowOpacity', 'Facade windows (0=off)', 0, 1, 0.02],
   ['gradeBlur', 'Softness (blur px)', 0, 2, 0.05],
   ['grainOpacity', 'Film grain', 0, 0.3, 0.005],
 ];
