@@ -230,17 +230,32 @@ export const LOOK = {
   // Real trees photograph OLIVE, not "game green": reference sample
   // #5e5e40 has red ≈ green. Hue 0.17 (yellow-green), low saturation.
   // Each tree/bush still varies around these base values.
-  treeHue: 0.17,
-  treeHueSpan: 0.05,
-  treeSat: 0.30,
-  treeLight: 0.28,
-  treeLightSpan: 0.12,
+  treeHue: 0.16,
+  treeHueSpan: 0.09,   // wider hue range: yellow-olive through green-olive
+  treeSat: 0.35,
+  treeLight: 0.26,
+  treeLightSpan: 0.16, // more tree-to-tree lightness variety
+  // Multi-lobed canopies: each tree is 1–4 overlapping leaf-blobs, the
+  // top one sun-lit, the lower ones shadowed — real trees are clumps,
+  // not spheres, and light filters from above (see ref frames 060/111).
+  treeLobes: 3,        // blobs per tree (1 = old lollipop look)
+  treeLobeSpread: 1.0, // how far side-blobs sit from the middle
+  treeTopLight: 1.35,  // sunlit top blob: lightness ×
+  treeUnderDark: 0.62, // shadowed lower blobs: lightness ×
 
   // --- Building shadows (High quality only) ---
   // Reference shadows are soft and lifted (shadowed ground ≈ 60% of the
   // sunlit value), so the dark blobs get lighter. Length/direction now
   // follow the sun position automatically.
   shadowOpacity: 0.30,
+
+  // --- Facade windows ---
+  // A second building layer overlays a tiled window-punch pattern on
+  // every wall, giving facades the floor/window rhythm the reference
+  // shows. 0 disables it entirely. (MapLibre scales patterns by zoom, so
+  // window size breathes a little as the camera zooms — judged
+  // acceptable; set 0 if it bothers you.)
+  windowOpacity: 0.38,
 
   // --- Camera texture: softness + grain ---
   // The reference is 1080p video of a neural render: slightly soft, with

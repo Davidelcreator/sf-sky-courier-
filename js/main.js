@@ -117,20 +117,34 @@ function rotateHue(hex, deg) {
   return '#' + to(R) + to(G) + to(B);
 }
 
+// Multiply a hex color's brightness by `f` (clamped) — cheap way to make
+// darker/lighter variants of a palette without touching its hue.
+function shadeHex(hex, f) {
+  const ch = (i) => Math.max(0, Math.min(255,
+    Math.round(parseInt(hex.slice(i, i + 2), 16) * f)));
+  return '#' + [1, 3, 5].map((i) => ch(i).toString(16).padStart(2, '0')).join('');
+}
+
 // Build the MapLibre color expression for buildings. Each building is
-// sorted into one of 4 "buckets" (from its id + height), and each bucket
-// uses a hue-shifted copy of the BUILDING_COLORS ramp — so the city is
-// colored by height AND neighbouring buildings pick different tints.
+// sorted into one of 8 "buckets" (from its id + height); buckets vary in
+// BOTH warmth (hue rotation) and value (lighter/darker) — so a block
+// reads as many different materials the way a real street does, while
+// every variant stays inside the desaturated reference family.
 function buildingColorExpression() {
   const heightInput = ['coalesce', ['get', 'render_height'], 0];
   const ramp = (pal) => ['interpolate', ['linear'], heightInput, ...pal.flat()];
-  const shift = (deg) => BUILDING_COLORS.map(([h, hex]) => [h, rotateHue(hex, deg)]);
-  const bucket = ['%', ['+', ['to-number', ['coalesce', ['id'], 0]], ['round', heightInput]], 4];
+  const variant = (deg, f) =>
+    BUILDING_COLORS.map(([h, hex]) => [h, shadeHex(rotateHue(hex, deg), f)]);
+  const bucket = ['%', ['+', ['to-number', ['coalesce', ['id'], 0]], ['round', heightInput]], 8];
   return ['match', bucket,
     0, ramp(BUILDING_COLORS),
-    1, ramp(shift(12)),
-    2, ramp(shift(-12)),
-    ramp(shift(26))];
+    1, ramp(variant(10, 1.0)),    // warmer
+    2, ramp(variant(-10, 1.0)),   // cooler
+    3, ramp(variant(0, 0.86)),    // darker (older concrete / brick shadow)
+    4, ramp(variant(14, 1.10)),   // light warm (painted stucco)
+    5, ramp(variant(-16, 0.93)),  // dark cool (glass/steel)
+    6, ramp(variant(22, 0.95)),   // tan-brick family
+    ramp(variant(0, 1.12))];      // near-white (fresh paint / limestone)
 }
 
 const map = new maplibregl.Map({
@@ -213,13 +227,48 @@ function initGame() {
     firstSymbolId,
   );
 
+  // --- Facade windows: a second extrusion layer with a window pattern ---
+  // A pattern REPLACES a layer's color, so the tinted buildings keep
+  // their own layer and this one overlays only the dark window punches
+  // (everything else in the tile is transparent, letting the tint show).
+  // The pattern is generated in code — no image files.
+  const win = document.createElement('canvas');
+  win.width = 12; win.height = 12;
+  const wctx = win.getContext('2d');
+  wctx.clearRect(0, 0, 12, 12);                  // transparent wall
+  wctx.fillStyle = 'rgba(25, 30, 40, 1)';        // dark glass punch
+  wctx.fillRect(2, 2, 6, 7);                     // one window per cell
+  map.addImage('window-grid', wctx.getImageData(0, 0, 12, 12), { pixelRatio: 1 });
+  map.addLayer(
+    {
+      id: '3d-buildings-windows',
+      source: buildingSourceId,
+      'source-layer': 'building',
+      type: 'fill-extrusion',
+      minzoom: 15,                               // skip far tiles — detail fades anyway
+      paint: {
+        'fill-extrusion-pattern': 'window-grid',
+        // 0.5 m SHORTER than the tint layer: its patterned roof face then
+        // hides below the tint layer's clean roof (depth test), so the
+        // windows appear on WALLS only — roofs stay plain.
+        'fill-extrusion-height': ['-', ['coalesce', ['get', 'render_height'], 5], 0.5],
+        'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+        'fill-extrusion-opacity': LOOK.windowOpacity,
+        'fill-extrusion-vertical-gradient': false, // gradient already on the tint layer
+      },
+    },
+    firstSymbolId,
+  );
+
   // Hide the tall gray boxes OSM extrudes for the Bay Bridge towers: we
   // draw nicer towers ourselves, and removing the blocks lets the roadway
   // run clear between/around them. We match by stable OSM feature id
   // because a location-based `within` filter proved unreliable here.
   // ['id'] is each feature's id; hide any whose id is in our list.
   if (OSM_HIDE_IDS && OSM_HIDE_IDS.length) {
-    map.setFilter('3d-buildings', ['!', ['in', ['id'], ['literal', OSM_HIDE_IDS]]]);
+    const hide = ['!', ['in', ['id'], ['literal', OSM_HIDE_IDS]]];
+    map.setFilter('3d-buildings', hide);
+    map.setFilter('3d-buildings-windows', hide);
   }
 
   // Our three.js layer (car, beacon) is added last so it draws with
@@ -359,12 +408,22 @@ function applyLook() {
     }
   }
 
-  // Foliage tint (trees + bushes) — live restyle of every instance.
-  retintFoliage();
+  // Foliage (trees + bushes) — re-lay-out canopy lobes and restyle every
+  // instance live (rebuildTreeLobes retints internally).
+  rebuildTreeLobes();
 
   // Building-shadow darkness (the geometry itself follows the sun on its
   // next once-a-second rebuild).
   if (shadowState.mesh) shadowState.mesh.material.opacity = LOOK.shadowOpacity;
+
+  // Facade window strength (the pattern overlay layer).
+  try {
+    if (map.getLayer('3d-buildings-windows')) {
+      map.setPaintProperty('3d-buildings-windows', 'fill-extrusion-opacity', LOOK.windowOpacity);
+      map.setLayoutProperty('3d-buildings-windows', 'visibility',
+        LOOK.windowOpacity > 0 ? 'visible' : 'none');
+    }
+  } catch (e) {}
 
   // Water shader colors (medium/high quality; low's flat plane is set at build).
   if (three.waterMaterial) {
@@ -446,7 +505,12 @@ const LOOK_PANEL = [
   ['treeSat', 'Foliage saturation', 0, 1, 0.01],
   ['treeLight', 'Foliage lightness', 0.05, 0.6, 0.01],
   ['treeLightSpan', 'Foliage light variety', 0, 0.3, 0.01],
+  ['treeLobes', 'Tree lobes (1=ball)', 1, 4, 1],
+  ['treeLobeSpread', 'Tree lobe spread', 0.3, 2, 0.05],
+  ['treeTopLight', 'Canopy sunlit top ×', 1, 1.6, 0.02],
+  ['treeUnderDark', 'Canopy shadow under ×', 0.4, 1, 0.02],
   ['shadowOpacity', 'Building shadow darkness', 0, 0.8, 0.01],
+  ['windowOpacity', 'Facade windows (0=off)', 0, 1, 0.02],
   ['gradeBlur', 'Softness (blur px)', 0, 2, 0.05],
   ['grainOpacity', 'Film grain', 0, 0.3, 0.005],
 ];
@@ -1541,16 +1605,20 @@ function buildTrees() {
     new THREE.MeshLambertMaterial({ color: 0x6b4a2f }),
     total,
   );
+  // Canopies are LOBES: up to 4 leaf-blobs per tree (LOOK.treeLobes),
+  // so we allocate the instanced mesh at trees × 4 and let
+  // rebuildTreeLobes() decide how many are actually shown.
+  const MAX_LOBES = 4;
   const canopies = new THREE.InstancedMesh(
-    new THREE.IcosahedronGeometry(2.4, 1),
-    new THREE.MeshLambertMaterial({ color: 0xffffff }), // white × per-tree tint
-    total,
+    new THREE.IcosahedronGeometry(1.9, 1),
+    new THREE.MeshLambertMaterial({ color: 0xffffff }), // white × per-lobe tint
+    total * MAX_LOBES,
   );
 
   const rand = mulberry32(42);
   const matrix = new THREE.Matrix4();
   const quat = new THREE.Quaternion();
-  const color = new THREE.Color();
+  const trees = []; // per-tree placement + shape, consumed by rebuildTreeLobes
   let i = 0;
 
   for (const spot of TREE_SPOTS) {
@@ -1570,38 +1638,114 @@ function buildTrees() {
                      new THREE.Vector3(s, s, s));
       trunks.setMatrixAt(i, matrix);
 
-      matrix.compose(new THREE.Vector3(x, center.y + 4.4 * s, z), quat,
-                     new THREE.Vector3(s, s, s));
-      canopies.setMatrixAt(i, matrix);
+      // Shape factors give silhouette VARIETY: wide+low (spreading),
+      // narrow+tall (columnar) and everything between.
+      trees.push({
+        x, z, y: center.y + 4.4 * s, s,
+        shapeH: 0.7 + rand() * 1.0,   // horizontal spread of side lobes
+        shapeV: 0.75 + rand() * 0.8,  // vertical stretch of the crown
+      });
     }
   }
-  trunks.count = i; canopies.count = i; // only render the instances we filled
+  trunks.count = i;
 
-  // Canopy colors come from LOOK (see retintFoliage) so the P-panel
-  // sliders can restyle every tree live.
   three.canopies = canopies;
-  retintFoliage();
+  three.treeData = trees;
+  rebuildTreeLobes(); // positions every lobe + tints (reads LOOK)
 
   const group = new THREE.Group();
   group.add(trunks, canopies);
   return group;
 }
 
-// Color every tree canopy and bush from the LOOK foliage knobs. Its own
-// seeded random stream keeps the per-plant variety identical run to run.
+// Lay out every canopy lobe from LOOK's tree knobs. Lobe 0 is the crown
+// (top, sun-lit); the others huddle around/below it (shadowed). Called at
+// build and again by the P-panel sliders — 3k matrix writes is cheap.
+function rebuildTreeLobes() {
+  const mesh = three.canopies;
+  const trees = three.treeData;
+  if (!mesh || !trees) return;
+  const L = Math.max(1, Math.min(4, Math.round(LOOK.treeLobes)));
+  const rand = mulberry32(2025);
+  const matrix = new THREE.Matrix4();
+  const quat = new THREE.Quaternion();
+  const pos = new THREE.Vector3();
+  const scl = new THREE.Vector3();
+  // Remember each lobe's height within its tree (0 = lowest, 1 = crown):
+  // retintFoliage tones lobes by height, so sun-lit tops and shadowed
+  // undersides show from EVERY angle, not just from above.
+  const heights = new Float32Array(trees.length * L);
+  let idx = 0;
+  for (const t of trees) {
+    for (let j = 0; j < L; j++) {
+      let yOff;
+      if (j === 0) {
+        // The crown: biggest lobe, sits highest, stretched by shapeV.
+        yOff = 0.55 * t.s * t.shapeV;
+        pos.set(t.x, t.y + yOff, t.z);
+        scl.set(1.1 * t.s, 1.1 * t.s * t.shapeV, 1.1 * t.s);
+      } else {
+        // Side lobes: ring around the crown, spanning low to almost-top,
+        // so the height-toning paints visible dappling on the silhouette.
+        const a = rand() * Math.PI * 2;
+        const rr = LOOK.treeLobeSpread * (0.55 + rand() * 0.65) * t.s * t.shapeH;
+        const sc = t.s * (0.75 + rand() * 0.45);
+        yOff = (rand() * 1.1 - 0.55) * t.s;
+        pos.set(t.x + Math.cos(a) * rr, t.y + yOff, t.z + Math.sin(a) * rr);
+        scl.set(sc * 1.05, sc * 0.85, sc * 1.05);
+      }
+      // Normalize height into 0..1 across the lobe span (-0.55s .. +0.55s·shapeV).
+      heights[idx] = Math.max(0, Math.min(1, (yOff / t.s + 0.55) / (0.55 + 0.55 * t.shapeV)));
+      matrix.compose(pos, quat, scl);
+      mesh.setMatrixAt(idx++, matrix);
+    }
+  }
+  mesh.count = idx;
+  mesh.instanceMatrix.needsUpdate = true;
+  three.lobeHeights = heights;
+  retintFoliage();
+}
+
+// Color every canopy lobe and bush from the LOOK foliage knobs. Each TREE
+// gets its own hue/lightness; within a tree the crown lobe is sun-lit
+// (×treeTopLight) and the lower lobes shadowed (×treeUnderDark) — that
+// two-tone is what makes light read as filtering through the canopy.
+// Seeded streams keep the variety identical run to run.
 function retintFoliage() {
   const color = new THREE.Color();
-  for (const [mesh, lightMult] of [[three.canopies, 1], [three.bushes, 0.9]]) {
-    if (!mesh) continue;
+
+  const canopies = three.canopies;
+  if (canopies && three.treeData) {
+    const L = Math.max(1, Math.min(4, Math.round(LOOK.treeLobes)));
     const rand = mulberry32(7331);
-    for (let i = 0; i < mesh.count; i++) {
-      mesh.setColorAt(i, color.setHSL(
+    let idx = 0;
+    for (const t of three.treeData) {
+      const hue = LOOK.treeHue + rand() * LOOK.treeHueSpan;
+      const light = LOOK.treeLight + rand() * LOOK.treeLightSpan;
+      for (let j = 0; j < L; j++) {
+        // Tone by the lobe's height in the canopy: shadowed at the
+        // bottom, sun-lit at the crown, a little jitter for dappling.
+        const h = three.lobeHeights ? three.lobeHeights[idx] : 1;
+        const tone = LOOK.treeUnderDark
+          + (LOOK.treeTopLight - LOOK.treeUnderDark) * h
+          + (rand() - 0.5) * 0.12;
+        canopies.setColorAt(idx++, color.setHSL(hue, LOOK.treeSat, light * tone));
+      }
+    }
+    if (canopies.instanceColor) canopies.instanceColor.needsUpdate = true;
+  }
+
+  const bushes = three.bushes;
+  if (bushes) {
+    const rand = mulberry32(9713);
+    for (let i = 0; i < bushes.count; i++) {
+      bushes.setColorAt(i, color.setHSL(
         LOOK.treeHue + rand() * LOOK.treeHueSpan,
         LOOK.treeSat,
-        (LOOK.treeLight + rand() * LOOK.treeLightSpan) * lightMult,
+        (LOOK.treeLight + rand() * LOOK.treeLightSpan) * 0.85,
       ));
     }
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    if (bushes.instanceColor) bushes.instanceColor.needsUpdate = true;
   }
 }
 
@@ -1614,7 +1758,9 @@ function buildBushes() {
     TREE_SPOTS.reduce((sum, s) => sum + s.count, 0) * mult);
 
   const bushes = new THREE.InstancedMesh(
-    new THREE.IcosahedronGeometry(1.1, 0),  // small + low-poly = cheap
+    // detail 1 (80 tris) instead of 0 (20): rounded shrubs, not gray rocks.
+    // Measured cost: none (A/B vs baseline worktree, PERF.md).
+    new THREE.IcosahedronGeometry(1.1, 1),
     new THREE.MeshLambertMaterial({ color: 0xffffff }), // white × per-bush tint
     total,
   );
@@ -1635,9 +1781,9 @@ function buildBushes() {
       const x = center.x + Math.cos(ang) * r;
       const z = center.z + Math.sin(ang) * r;
       const s = 0.6 + rand() * 1.1;
-      // Squash slightly so bushes are wider than tall.
-      matrix.compose(new THREE.Vector3(x, center.y + 0.8 * s, z), quat,
-                     new THREE.Vector3(s * 1.3, s, s * 1.3));
+      // Squash firmly so bushes hug the ground like real shrubs.
+      matrix.compose(new THREE.Vector3(x, center.y + 0.55 * s, z), quat,
+                     new THREE.Vector3(s * 1.5, s * 0.75, s * 1.5));
       bushes.setMatrixAt(i, matrix);
     }
   }

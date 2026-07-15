@@ -25,3 +25,20 @@ Every step: change → `npm run shot` (launch check + capture) → judge vs
   MapLibre buildings, true soft shadows, glass reflections, motion blur.
 - Every knob is in LOOK (config.js); press P in-game for live sliders.
 | 9 | Grain animates per-frame during play (static only in shot mode) | step9_graincheck.png | fix for David's report: static grain smeared like a dirty window at high speed. Verified animating in live tab; captures unchanged. Launch check OK. |
+| D1 | Trees: multi-lobe canopies (1-4 lobes, LOOK knobs) + height-toned dappling (lit crown, shadowed under) + silhouette variety | step_d1_trees.png | **closer** — clumpy varied silhouettes, visible light-through-canopy toning (took 3 tries: flat two-tone was invisible; height-based toning reads from all angles). FPS 43.3 headless-GPU >= 40 floor. Also added tools/fps.js (headless real-GPU FPS probe). |
+| D2 | Foliage richness: wider hue/light variety, sat 0.35; bushes reshaped (detail-1 icosa, squashed) so they stop reading as rocks | step_d2_foliage.png | **closer** — shrub mounds instead of gray rocks; more tree-to-tree variety. FPS: zero cost proven by back-to-back A/B vs a detail-start worktree on :8081 (machine had drifted ~10% globally — first reading looked like a regression and wasn't). |
+| D3 | Building variety: 4 → 8 tint buckets varying warmth AND value (darker concrete, light stucco, glass-dark, near-white) | step_d3_buildings.png | **closer** — neighbouring buildings now differ like real streets; all variants stay in the desaturated family. A/B: baseline 38.4 vs current 39.1 — zero cost. |
+| D5 | Facade windows: code-generated window-grid pattern on a second extrusion layer; 0.5m shorter so roofs stay clean (depth trick); LOOK.windowOpacity slider | step_d5_windows.png, step_d5_windows_close.png | **closer (big)** — every facade gains floor/window rhythm; the city stops reading as painted slabs. First attempt patterned the ROOFS too — fixed by shortening the layer. A/B: 39.1 vs 38.35 — -0.75 fps, within noise, floor OK. (D4 vertical-gradient was already MapLibre's default — no change needed.) |
+| D6 | Storefront base band (3rd short extrusion layer) | step_d6_storefront.png, step_d6_street2.png | **no visible difference — REVERTED.** Zero FPS cost (A/B 32.5 vs 32.9, machine had drifted again), but across three viewpoints the band never visibly showed: our flying/chase cameras rarely see building bases up close. Contract says no visible improvement = revert; code removed, tree back to D5 state. |
+
+## Detail-pass wrap-up
+- Landed: D1 multi-lobe trees, D2 foliage richness + shrub bushes, D3 8-bucket
+  building variety, D5 window-grid facades (D4 was already default; D6 reverted).
+- Before/after: shots/detail_base.png vs shots/step_d6_reverted.png
+  (stacked: shots/detail_compare.png).
+- Normal play mode verified: zero page errors, starts, all overlays active.
+- FPS: every landed change measured at zero-to-noise cost via alternating A/B
+  against a detail-start worktree on :8081 (kept at ../3dflyer-baseline for
+  future A/Bs). Absolute numbers drifted with machine load (44 -> 39 -> 33 over
+  the session) — the A/B method is the only honest signal on this box.
+- New LOOK sliders: tree lobes/spread/top-light/under-dark, facade windows.
