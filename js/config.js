@@ -233,7 +233,11 @@ export const BRIDGES = [
     color: 0xd1451e,            // International Orange, its real paint!
     deckHeight: 67,
     towerHeight: 227,
-    drawTowers: false,          // OSM renders the real towers (in gray)
+    // OSM already models the real towers in fine detail (dozens of parts),
+    // so we DON'T draw our own — but our height-based tint paints them the
+    // wrong colour. recolorTowers repaints just those parts orange instead.
+    drawTowers: false,
+    recolorTowers: true,
     towers: [[-122.4778921, 37.8140144], [-122.4792343, 37.8255026]],
     cableAnchors: [[-122.4775337, 37.8109470], [-122.4795927, 37.8285700]],
     deck: [

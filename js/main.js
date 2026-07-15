@@ -1015,6 +1015,124 @@ function bridgeDeckHeightAt(lng, lat) {
   return best;
 }
 
+// Closest point (horizontally) on a deck polyline to a target scene
+// point. Used to snap a central pylon onto the deck centreline so it
+// lands inside the fork gap instead of beside the road.
+function closestOnPolylineXZ(pts, target) {
+  let best = null, bestD = Infinity;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], c = pts[i + 1];
+    const abx = c.x - a.x, abz = c.z - a.z;
+    const len2 = abx * abx + abz * abz;
+    let t = len2 > 0 ? ((target.x - a.x) * abx + (target.z - a.z) * abz) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const px = a.x + abx * t, pz = a.z + abz * t;
+    const dx = target.x - px, dz = target.z - pz, d = dx * dx + dz * dz;
+    if (d < bestD) { bestD = d; best = { x: px, z: pz }; }
+  }
+  return best || { x: target.x, z: target.z };
+}
+
+// Build a forked deck for a central-tower bridge. Around the tower the
+// single roadway opens into two carriageways with a gap in the middle
+// (where the pylon stands) and then closes again — the real Bay Bridge
+// east span. We walk the centreline in short steps and, at each step,
+// work out how wide that central gap should be.
+const FORK = { HALF: 120, GAP_MAX: 11 }; // metres: fork reach each side, widest gap
+// Where central-tower spans fork: used to nudge traffic onto a carriageway
+// (instead of the empty centre gap) as it passes the pylon.
+const forkZones = BRIDGES
+  .filter((b) => b.towerStyle === 'central' && b.towers)
+  .map((b) => ({ lng: b.towers[0][0], lat: b.towers[0][1], half: FORK.HALF, gap: FORK.GAP_MAX }));
+function buildForkedDeck(b, deckPts, ctx) {
+  const { group, deckMat, medianMat, pierMat, polePositions } = ctx;
+  const towerP = toScene(b.towers[0][0], b.towers[0][1], 0); // tower, ground level
+
+  // Total length + per-segment lengths of the centreline.
+  const segLen = [];
+  let total = 0;
+  for (let i = 0; i < deckPts.length - 1; i++) {
+    const l = deckPts[i].distanceTo(deckPts[i + 1]);
+    segLen.push(l); total += l;
+  }
+
+  // Resample the centreline into even ~14 m steps (interpolating height too).
+  const STEP = 14;
+  const n = Math.max(2, Math.ceil(total / STEP));
+  const samples = [];
+  for (let k = 0; k <= n; k++) {
+    const s = total * k / n;
+    let acc = 0, i = 0;
+    while (i < segLen.length - 1 && acc + segLen[i] < s) { acc += segLen[i]; i++; }
+    const t = segLen[i] > 0 ? (s - acc) / segLen[i] : 0;
+    samples.push({ p: deckPts[i].clone().lerp(deckPts[i + 1], t), s });
+  }
+
+  // Distance along the deck (arc length) of the point nearest the tower.
+  let sTower = 0, bestD = Infinity;
+  for (const smp of samples) {
+    const dx = smp.p.x - towerP.x, dz = smp.p.z - towerP.z, d = dx * dx + dz * dz;
+    if (d < bestD) { bestD = d; sTower = smp.s; }
+  }
+
+  // Gap width as a function of arc length: widest at the tower, tapering
+  // smoothly (raised cosine) to zero FORK.HALF metres to either side.
+  const gapAt = (s) => {
+    const u = Math.abs(s - sTower) / FORK.HALF;
+    return u >= 1 ? 0 : FORK.GAP_MAX * (0.5 + 0.5 * Math.cos(Math.PI * u));
+  };
+
+  // A deck slab of the given width, centred at `center`, length along
+  // `along`; a little length overlap hides the seams between steps.
+  const addSlab = (center, along, width, len) => {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(width, 3, len + 0.6), deckMat);
+    slab.position.copy(center);
+    slab.lookAt(center.clone().add(along));
+    group.add(slab);
+  };
+
+  for (let i = 0; i < samples.length - 1; i++) {
+    const a = samples[i].p, c = samples[i + 1].p;
+    const len = a.distanceTo(c);
+    if (len < 0.001) continue;
+    const mid = a.clone().add(c).multiplyScalar(0.5);
+    const along = c.clone().sub(a).multiplyScalar(1 / len);
+    const across = new THREE.Vector3(-along.z, 0, along.x);
+    if (across.length() > 0.001) across.normalize();
+    const G = gapAt((samples[i].s + samples[i + 1].s) / 2);
+
+    if (G < 1) {
+      // Normal single deck with a yellow centre median.
+      addSlab(mid, along, 22, len);
+      const median = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1, len + 0.6), medianMat);
+      median.position.copy(mid); median.position.y += 2.3;
+      median.lookAt(mid.clone().add(along));
+      group.add(median);
+    } else {
+      // Two carriageways: outer edges stay at ±11 m, a gap G opens up the
+      // middle. Each carriageway is (11 − G/2) wide, centred at ±(5.5+G/4).
+      const cwWidth = 11 - G / 2;
+      const centerOff = 5.5 + G / 4;
+      for (const side of [-1, 1]) {
+        addSlab(mid.clone().add(across.clone().multiplyScalar(centerOff * side)),
+                along, cwWidth, len);
+      }
+    }
+
+    // Lamp posts every ~85 m along the outer edges; piers every ~180 m.
+    if (i % 6 === 0) {
+      for (const side of [-1, 1]) {
+        polePositions.push(mid.clone().add(across.clone().multiplyScalar(10.5 * side)));
+      }
+    }
+    if (b.piers && i % 13 === 0 && mid.y > 8) {
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(5, mid.y, 5), pierMat);
+      pier.position.set(mid.x, mid.y / 2, mid.z);
+      group.add(pier);
+    }
+  }
+}
+
 // Build the bridges from simple shapes at real OSM coordinates.
 // Everything is in scene coordinates (meters), so plain vector math
 // works: decks are boxes laid point-to-point, towers are boxes standing
@@ -1039,6 +1157,10 @@ function buildBridges() {
       // Golden Gate's ends sit on bluffs, not at sea level.
       return toScene(p[0], p[1], grounded ? (p[2] ?? 1) : b.deckHeight);
     });
+    if (b.towerStyle === 'central') {
+      // Central-tower spans fork the roadway around the pylon.
+      buildForkedDeck(b, deckPts, { group, deckMat, medianMat, pierMat, polePositions });
+    } else
     for (let i = 0; i < deckPts.length - 1; i++) {
       const a = deckPts[i];
       const c = deckPts[i + 1];
@@ -1083,6 +1205,15 @@ function buildBridges() {
 
     // --- Suspension kit: towers + main cables ---
     const towerTops = b.towers.map((p) => toScene(p[0], p[1], b.towerHeight));
+    if (b.towerStyle === 'central') {
+      // The configured tower coord can sit a little off our simplified deck
+      // polyline; snap the pylon onto the centreline so it (and the cables
+      // draped over it) land inside the fork gap, not beside the road.
+      for (const top of towerTops) {
+        const snap = closestOnPolylineXZ(deckPts, top);
+        top.x = snap.x; top.z = snap.z;
+      }
+    }
     const anchorA = toScene(b.cableAnchors[0][0], b.cableAnchors[0][1], b.deckHeight);
     const anchorB = toScene(b.cableAnchors[1][0], b.cableAnchors[1][1], b.deckHeight);
 
@@ -1547,10 +1678,26 @@ function updateTraffic(dt, nowMs) {
     // Cars far from the player get recycled onto a nearby road.
     if (metersBetween(lng, lat, car.lng, car.lat) > 1400) { c.road = null; c.mesh.visible = false; continue; }
 
+    // Near a central pylon the deck forks, so shift the car onto the
+    // right-hand carriageway — otherwise it would drive through the tower
+    // and the empty centre gap. (Opposing directions nudge to opposite
+    // sides, which lands them on opposite carriageways, like the real road.)
+    let dLng = lng, dLat = lat;
+    for (const fz of forkZones) {
+      if (metersBetween(lng, lat, fz.lng, fz.lat) < fz.half) {
+        const dxm = (b[0] - a[0]) * Math.cos(lat * DEG), dym = b[1] - a[1];
+        const L = Math.hypot(dxm, dym) || 1;
+        const off = fz.gap / 2 + 3; // metres out onto the carriageway
+        dLng = lng + (dym / L * off) / (METERS_PER_DEG_LAT * Math.cos(lat * DEG));
+        dLat = lat + (-dxm / L * off) / METERS_PER_DEG_LAT;
+        break;
+      }
+    }
+
     // Ride up onto a bridge deck if this bit of road crosses one.
-    const deckH = bridgeDeckHeightAt(lng, lat);
-    const y = deckH !== null ? deckH : Math.max(0, groundAt(lng, lat, 0));
-    const p = toScene(lng, lat, y + 1);
+    const deckH = bridgeDeckHeightAt(dLng, dLat);
+    const y = deckH !== null ? deckH : Math.max(0, groundAt(dLng, dLat, 0));
+    const p = toScene(dLng, dLat, y + 1);
     c.mesh.position.copy(p);
     const dx = (b[0] - a[0]) * Math.cos(lat * DEG);
     const dy = b[1] - a[1];
@@ -1855,6 +2002,59 @@ window.game.step = updatePhysics;
 let buildingSourceId = null;
 const buildingCache = { list: [], lastRefresh: -Infinity, lng: null, lat: null };
 
+// --- Bridge-tower recolouring ---------------------------------------------
+// Some bridges (the Golden Gate) have towers OSM already models in fine
+// detail, but our height-based tint paints them the wrong colour. We repaint
+// exactly those buildings the bridge's own colour. We can only do it once
+// their map tiles have loaded (i.e. when you fly near), so we DISCOVER the
+// tower parts at runtime: any building within `radius` of a tower coordinate
+// gets its id remembered, then the fill colour switches to a "these ids →
+// bridge colour, everything else → normal" rule.
+const recolorTowers = BRIDGES
+  .filter((b) => b.recolorTowers && b.towers)
+  .map((b) => ({
+    css: '#' + (b.color >>> 0).toString(16).padStart(6, '0'),
+    towers: b.towers,
+    radius: b.recolorRadius || 75, // metres from a tower coord that counts as "tower"
+  }));
+const recolorTowerIds = new Set();
+
+// Scan freshly-fetched building features for tower parts near a recolour
+// bridge; when we find new ones, re-apply the colour rule. Fully guarded so
+// a bad expression can never break the render loop.
+function updateTowerRecolor(feats) {
+  if (!recolorTowers.length) return;
+  let grew = false;
+  for (const f of feats) {
+    if (f.id == null || recolorTowerIds.has(f.id)) continue;
+    if ((f.properties.render_height || 0) < 25) continue; // skip low clutter
+    let c = f.geometry.coordinates;
+    while (Array.isArray(c[0])) c = c[0];     // first vertex, representative point
+    for (const rc of recolorTowers) {
+      if (rc.towers.some((t) => metersBetween(c[0], c[1], t[0], t[1]) < rc.radius)) {
+        recolorTowerIds.add(f.id);
+        grew = true;
+        break;
+      }
+    }
+  }
+  if (grew) applyTowerRecolor();
+}
+
+function applyTowerRecolor() {
+  try {
+    if (!map.getLayer('3d-buildings') || !recolorTowerIds.size) return;
+    map.setPaintProperty('3d-buildings', 'fill-extrusion-color', [
+      'case',
+      ['in', ['id'], ['literal', [...recolorTowerIds]]],
+      recolorTowers[0].css,          // all recolour bridges share one colour today
+      buildingColorExpression(),     // everything else keeps its height colour
+    ]);
+  } catch (e) {
+    /* never let a repaint break the frame */
+  }
+}
+
 function refreshBuildingCache(nowMs) {
   // Refresh once a second — or sooner if the car has covered 150 m,
   // so a 600 mph run can't outfly the collision data.
@@ -1870,6 +2070,9 @@ function refreshBuildingCache(nowMs) {
   const feats = map.querySourceFeatures(buildingSourceId, {
     sourceLayer: 'building',
   });
+
+  // Repaint any bridge towers (e.g. Golden Gate) that just came into view.
+  updateTowerRecolor(feats);
 
   buildingCache.list = [];
   for (const f of feats) {
