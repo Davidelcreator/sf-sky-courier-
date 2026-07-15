@@ -235,6 +235,12 @@ export const LOOK = {
   treeSat: 0.30,
   treeLight: 0.28,
   treeLightSpan: 0.12,
+
+  // --- Building shadows (High quality only) ---
+  // Reference shadows are soft and lifted (shadowed ground ≈ 60% of the
+  // sunlit value), so the dark blobs get lighter. Length/direction now
+  // follow the sun position automatically.
+  shadowOpacity: 0.30,
 };
 
 // Satellite imagery base. Free ESRI "World Imagery" tiles (no API key)

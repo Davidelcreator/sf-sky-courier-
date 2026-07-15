@@ -362,6 +362,10 @@ function applyLook() {
   // Foliage tint (trees + bushes) — live restyle of every instance.
   retintFoliage();
 
+  // Building-shadow darkness (the geometry itself follows the sun on its
+  // next once-a-second rebuild).
+  if (shadowState.mesh) shadowState.mesh.material.opacity = LOOK.shadowOpacity;
+
   // Water shader colors (medium/high quality; low's flat plane is set at build).
   if (three.waterMaterial) {
     const u = three.waterMaterial.uniforms;
@@ -415,6 +419,7 @@ const LOOK_PANEL = [
   ['treeSat', 'Foliage saturation', 0, 1, 0.01],
   ['treeLight', 'Foliage lightness', 0.05, 0.6, 0.01],
   ['treeLightSpan', 'Foliage light variety', 0, 0.3, 0.01],
+  ['shadowOpacity', 'Building shadow darkness', 0, 0.8, 0.01],
 ];
 
 let lookPanelEl = null;
@@ -1738,7 +1743,7 @@ function buildShadowLayer() {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
   const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-    color: 0x0a1018, transparent: true, opacity: 0.36, depthWrite: false,
+    color: 0x0a1018, transparent: true, opacity: LOOK.shadowOpacity, depthWrite: false,
   }));
   mesh.renderOrder = 0;      // above the water, below the 3D objects
   mesh.frustumCulled = false;
@@ -1756,10 +1761,15 @@ function rebuildShadows(nowMs) {
   if (nowMs - shadowState.lastBuild < 1000) return;
   shadowState.lastBuild = nowMs;
 
-  // Horizontal direction the shadows point (away from the sun).
+  // Horizontal direction the shadows point (away from the sun), and how
+  // long they are — both derived from the LOOK sun's actual position, so
+  // moving the sun in the P panel moves the shadows to match.
   const s = three.sun.position;
   const dl = Math.hypot(s.x, s.z) || 1;
   const dirX = -s.x / dl, dirZ = -s.z / dl;
+  // length/height = 1/tan(sun elevation); clamp so a near-horizon slider
+  // position can't stretch shadows across the whole city.
+  const lenRatio = Math.min(dl / Math.max(0.05, s.y), 3);
 
   const positions = [];
   let count = 0;
@@ -1768,7 +1778,7 @@ function rebuildShadows(nowMs) {
     const cLng = (b.minLng + b.maxLng) / 2, cLat = (b.minLat + b.maxLat) / 2;
     if (metersBetween(cLng, cLat, car.lng, car.lat) > 900) continue;
 
-    const disp = Math.min(b.height * 1.7, 130); // shadow length, capped
+    const disp = Math.min(b.height * lenRatio, 130); // shadow length, capped
     const gy = Math.max(0, groundAt(cLng, cLat, 0)) + 0.6; // just above ground
     const dx = dirX * disp, dz = dirZ * disp;
 
@@ -2587,6 +2597,7 @@ if (SHOT) {
   car.alt = parseFloat(q.get('alt') ?? '3');
   car.heading = parseFloat(q.get('heading') ?? '2.7'); // looking SE toward the Ferry Building
   car.vx = 0; car.vy = 0; car.vAlt = 0;
+  if (q.get('q')) state.quality = q.get('q'); // e.g. &q=high to shoot with shadows
   state.camHeading = car.heading;
   state.cameraMode = parseInt(q.get('cam') ?? '1', 10);
   // The chase camera eases zoom/pitch toward the mode preset every frame,
