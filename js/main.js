@@ -348,6 +348,16 @@ function applyLook() {
     three.ambient.color.set(LOOK.threeAmbientColor);
     three.ambient.intensity = LOOK.threeAmbientIntensity;
   }
+
+  // Global grade: one CSS filter on the render canvas. The compositor
+  // does this for free, and it hits EVERYTHING drawn in the frame —
+  // map, buildings, water, our 3D objects, labels.
+  const canvas = map.getCanvas && map.getCanvas();
+  if (canvas) {
+    canvas.style.filter =
+      `saturate(${LOOK.gradeSaturate}) contrast(${LOOK.gradeContrast})` +
+      ` brightness(${LOOK.gradeBrightness})`;
+  }
 }
 
 // --- The P-panel: sliders for every LOOK knob, applied live -------------
@@ -368,6 +378,9 @@ const LOOK_PANEL = [
   ['threeSunIntensity', '3D sun strength', 0, 3, 0.05],
   ['threeAmbientColor', '3D fill color', 'color'],
   ['threeAmbientIntensity', '3D fill strength', 0, 2, 0.05],
+  ['gradeSaturate', 'Grade: saturation', 0, 2, 0.01],
+  ['gradeContrast', 'Grade: contrast', 0.5, 1.5, 0.01],
+  ['gradeBrightness', 'Grade: brightness', 0.5, 1.5, 0.01],
 ];
 
 let lookPanelEl = null;

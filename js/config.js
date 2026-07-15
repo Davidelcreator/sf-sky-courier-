@@ -200,6 +200,14 @@ export const LOOK = {
   threeSunDirZ: 0.45,
   threeAmbientColor: '#ccd3dc',
   threeAmbientIntensity: 0.85,
+
+  // --- Global grade (a CSS filter on the render canvas) ---
+  // One GPU-composited line that pushes the whole frame toward the
+  // reference: drop saturation, ease contrast (lifts blacks), tiny
+  // brightness lift. Free — no shaders, no FPS cost.
+  gradeSaturate: 0.72,
+  gradeContrast: 0.94,
+  gradeBrightness: 1.04,
 };
 
 // Satellite imagery base. Free ESRI "World Imagery" tiles (no API key)
