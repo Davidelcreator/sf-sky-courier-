@@ -2027,7 +2027,7 @@ function updateTowerRecolor(feats) {
   let grew = false;
   for (const f of feats) {
     if (f.id == null || recolorTowerIds.has(f.id)) continue;
-    if ((f.properties.render_height || 0) < 25) continue; // skip low clutter
+    if ((f.properties.render_height || 0) < 6) continue; // skip ground-level footprints only
     let c = f.geometry.coordinates;
     while (Array.isArray(c[0])) c = c[0];     // first vertex, representative point
     for (const rc of recolorTowers) {
