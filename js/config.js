@@ -154,24 +154,52 @@ export const TRAFFIC = {
 // Cycle in-game with Q or the GFX chip. New quality features get added
 // as flags here.
 export const GRAPHICS = {
-  // Golden-hour "sun" for the whole city (MapLibre 3D light on buildings).
-  // position is [radius, azimuth°, polar°]; polar 78 = sun low in the sky.
-  SUN:   { anchor: 'map', color: '#ffe0b0', intensity: 0.35, position: [1.5, 225, 80] },
-  // Warm hazy atmosphere at the horizon (MapLibre sky). The "fog-*" keys
-  // are haze that thickens with distance — depth cue, not real fog.
-  SKY: {
-    'sky-color': '#4a86d0', 'sky-horizon-blend': 0.5,
-    'horizon-color': '#ffcf92', 'horizon-fog-blend': 0.4,
-    'fog-color': '#f3cb9a', 'fog-ground-blend': 0.5, 'atmosphere-blend': 0.45,
-  },
-  // A plainer sky for Low (skips the pricey distance haze).
-  SKY_PLAIN: { 'sky-color': '#9ec1ea', 'sky-horizon-blend': 0.4, 'horizon-color': '#dfeaf7' },
-
+  // (Sun + sky colors moved to the LOOK object below — one place for
+  // every lighting/grade knob, editable live with the P panel.)
   PRESETS: {
     low:    { atmosphere: false, sceneryMult: 0.4, trafficMax: 8,  shadows: false, waterReflect: false },
     medium: { atmosphere: true,  sceneryMult: 0.8, trafficMax: 16, shadows: false, waterReflect: true },
     high:   { atmosphere: true,  sceneryMult: 1.0, trafficMax: 24, shadows: true,  waterReflect: true },
   },
+};
+
+// ============================================================
+// THE LOOK — every knob of the "photographic" grade in one place.
+// ============================================================
+// Values are measured from real photographic reference (see STYLE.md):
+// neutral noon-ish sun, desaturated palette, warm-gray distance haze.
+// Press P in-game for a slider panel that edits these LIVE, so you can
+// override any of my choices by eye. (Sliders don't persist — copy a
+// value you like back into this file to keep it.)
+export const LOOK = {
+  // --- MapLibre sun (shades building faces) ---
+  // position is [radius, azimuth°, polar°]: polar 50 ≈ sun 40° up — real
+  // late-morning light, not the old sunset. Color near-white (~6000 K).
+  sunAzimuth: 210,
+  sunPolar: 50,
+  sunColor: '#fff3e2',
+  sunIntensity: 0.30,
+
+  // --- MapLibre sky (background + distance haze) ---
+  // Pale desaturated blue overhead fading into a warm-gray haze band at
+  // the horizon — the single strongest "photo, not game" cue.
+  skyColor: '#a7bcda',
+  horizonColor: '#c2c6cd',
+  fogColor: '#c9ccd3',
+  horizonBlend: 0.4,
+  fogGroundBlend: 0.55,
+  atmosphereBlend: 0.4,
+
+  // --- three.js lights (car, bridges, trees, traffic) ---
+  // Matched to the MapLibre sun so our own 3D objects sit in the same
+  // light as the city. Strong ambient = the lifted, low-contrast look.
+  threeSunColor: '#fff3e2',
+  threeSunIntensity: 1.25,
+  threeSunDirX: -0.60,   // direction TOWARD the sun (west-southwest)
+  threeSunDirY: 0.64,    // sin(40°) — same elevation as the map sun
+  threeSunDirZ: 0.45,
+  threeAmbientColor: '#ccd3dc',
+  threeAmbientIntensity: 0.85,
 };
 
 // Satellite imagery base. Free ESRI "World Imagery" tiles (no API key)

@@ -27,7 +27,7 @@ import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders
 // what makes "the new button does nothing" bugs happen.)
 const V = new URL(import.meta.url).search;
 const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
-        SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS, OSM_HIDE_IDS } =
+        SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS, OSM_HIDE_IDS, LOOK } =
   await import('./config.js' + V);
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
@@ -296,14 +296,122 @@ function setBasemap(satelliteOn) {
 }
 
 // Apply the current graphics-quality preset. Cheap, live-toggleable bits
-// (the golden-hour light and horizon haze) update immediately; scenery
-// density is baked at load, so it uses the quality that was active then.
+// (light and sky) update immediately via applyLook(); scenery density is
+// baked at load, so it uses the quality that was active then.
 function applyGraphics() {
-  const p = gfx();
-  try { map.setLight(GRAPHICS.SUN); } catch (e) { /* older style */ }
-  try { map.setSky(p.atmosphere ? GRAPHICS.SKY : GRAPHICS.SKY_PLAIN); } catch (e) {}
+  applyLook();
   const chip = document.getElementById('gfx');
   if (chip) chip.textContent = `GFX ${state.quality.toUpperCase()}`;
+}
+
+// ============================================================
+// THE LOOK — apply every LOOK knob (config.js) to the live scene.
+// ============================================================
+// Called at init, on quality change, and by every P-panel slider move.
+// Each block is guarded so it works no matter how much of the scene has
+// been built yet.
+function applyLook() {
+  // MapLibre sun: shades the extruded building faces.
+  try {
+    map.setLight({
+      anchor: 'map',
+      color: LOOK.sunColor,
+      intensity: LOOK.sunIntensity,
+      position: [1.5, LOOK.sunAzimuth, LOOK.sunPolar],
+    });
+  } catch (e) { /* style not ready yet */ }
+
+  // MapLibre sky: background gradient + the distance-haze band.
+  // Low quality skips the pricey haze keys (same colors, plain sky).
+  try {
+    const sky = gfx().atmosphere
+      ? {
+          'sky-color': LOOK.skyColor, 'sky-horizon-blend': LOOK.horizonBlend,
+          'horizon-color': LOOK.horizonColor, 'horizon-fog-blend': 0.4,
+          'fog-color': LOOK.fogColor, 'fog-ground-blend': LOOK.fogGroundBlend,
+          'atmosphere-blend': LOOK.atmosphereBlend,
+        }
+      : {
+          'sky-color': LOOK.skyColor, 'sky-horizon-blend': LOOK.horizonBlend,
+          'horizon-color': LOOK.horizonColor,
+        };
+    map.setSky(sky);
+  } catch (e) {}
+
+  // three.js lights (car, bridges, trees, traffic) — match the map sun.
+  if (three.sun) {
+    three.sun.color.set(LOOK.threeSunColor);
+    three.sun.intensity = LOOK.threeSunIntensity;
+    three.sun.position.set(LOOK.threeSunDirX, LOOK.threeSunDirY, LOOK.threeSunDirZ);
+  }
+  if (three.ambient) {
+    three.ambient.color.set(LOOK.threeAmbientColor);
+    three.ambient.intensity = LOOK.threeAmbientIntensity;
+  }
+}
+
+// --- The P-panel: sliders for every LOOK knob, applied live -------------
+// Schema drives the UI: [key, label, min, max, step] for numbers, or
+// [key, label, 'color'] for color pickers. Extend it as LOOK grows.
+const LOOK_PANEL = [
+  ['sunAzimuth', 'Sun azimuth °', 0, 360, 1],
+  ['sunPolar', 'Sun height ° (90=horizon)', 5, 90, 1],
+  ['sunColor', 'Sun color', 'color'],
+  ['sunIntensity', 'Sun shading', 0, 1, 0.01],
+  ['skyColor', 'Sky color', 'color'],
+  ['horizonColor', 'Horizon color', 'color'],
+  ['fogColor', 'Haze color', 'color'],
+  ['horizonBlend', 'Horizon blend', 0, 1, 0.01],
+  ['fogGroundBlend', 'Haze ground blend', 0, 1, 0.01],
+  ['atmosphereBlend', 'Haze strength', 0, 1, 0.01],
+  ['threeSunColor', '3D sun color', 'color'],
+  ['threeSunIntensity', '3D sun strength', 0, 3, 0.05],
+  ['threeAmbientColor', '3D fill color', 'color'],
+  ['threeAmbientIntensity', '3D fill strength', 0, 2, 0.05],
+];
+
+let lookPanelEl = null;
+function toggleLookPanel() {
+  if (lookPanelEl) {
+    lookPanelEl.remove();
+    lookPanelEl = null;
+    return;
+  }
+  const el = document.createElement('div');
+  el.id = 'look-panel';
+  el.style.cssText =
+    'position:fixed;top:10px;left:10px;z-index:50;background:rgba(10,14,20,.88);' +
+    'color:#dde;padding:10px 12px;border-radius:10px;font:12px/1.6 monospace;' +
+    'max-height:85vh;overflow-y:auto;width:270px';
+  el.innerHTML = '<b>THE LOOK</b> <small>(P to close — values in config.js LOOK)</small><br>';
+  for (const row of LOOK_PANEL) {
+    const [key, label] = row;
+    const wrap = document.createElement('label');
+    wrap.style.cssText = 'display:block;margin-top:4px';
+    const isColor = row[2] === 'color';
+    const val = document.createElement('span');
+    val.textContent = ' ' + LOOK[key];
+    const input = document.createElement('input');
+    if (isColor) {
+      input.type = 'color';
+      input.value = LOOK[key];
+    } else {
+      input.type = 'range';
+      input.min = row[2]; input.max = row[3]; input.step = row[4];
+      input.value = LOOK[key];
+      input.style.width = '130px';
+    }
+    input.style.verticalAlign = 'middle';
+    input.addEventListener('input', () => {
+      LOOK[key] = isColor ? input.value : parseFloat(input.value);
+      val.textContent = ' ' + LOOK[key];
+      applyLook();
+    });
+    wrap.append(label + ' ', input, val);
+    el.appendChild(wrap);
+  }
+  document.body.appendChild(el);
+  lookPanelEl = el;
 }
 
 function cycleQuality() {
@@ -641,6 +749,7 @@ document.getElementById('btn-map').addEventListener('pointerdown', (e) => {
 // --- Graphics quality toggle (Q key, or tap the GFX chip) ---
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyQ') cycleQuality();
+  if (e.code === 'KeyP') toggleLookPanel(); // live sliders for the LOOK config
 });
 document.getElementById('gfx').addEventListener('pointerdown', (e) => {
   e.preventDefault();
@@ -1737,13 +1846,16 @@ const gameLayer = {
     three.camera = new THREE.Camera();
     three.scene = new THREE.Scene();
 
-    // Golden-hour lighting for our 3D objects (car, trees, bridges), so
-    // they match the warm city: a cool sky-blue fill + a warm low sun.
-    three.scene.add(new THREE.AmbientLight(0xbcd0f0, 0.7));
-    const sun = new THREE.DirectionalLight(0xffe0b0, 1.5);
-    sun.position.set(-0.6, 0.7, 0.35); // low, from the west (sunset side)
+    // Lighting for our 3D objects (car, trees, bridges). The actual
+    // colors/angles live in LOOK (config.js) and are applied by
+    // applyLook(), so the P-panel sliders update them live.
+    const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+    three.scene.add(ambient);
+    three.ambient = ambient;
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
     three.scene.add(sun);
     three.sun = sun;
+    applyLook(); // sets sun/ambient/sky from LOOK now that lights exist
 
     const { carGroup, carBody, carModel } = buildCar();
     three.carGroup = carGroup;
