@@ -349,6 +349,16 @@ function applyLook() {
     three.ambient.intensity = LOOK.threeAmbientIntensity;
   }
 
+  // Water shader colors (medium/high quality; low's flat plane is set at build).
+  if (three.waterMaterial) {
+    const u = three.waterMaterial.uniforms;
+    u.uDeep.value.set(LOOK.waterDeep);
+    u.uShallow.value.set(LOOK.waterShallow);
+    u.uSun.value.set(LOOK.waterSun);
+    u.uOpacity.value = LOOK.waterOpacity;
+    u.uGlint.value = LOOK.waterGlint;
+  }
+
   // Global grade: one CSS filter on the render canvas. The compositor
   // does this for free, and it hits EVERYTHING drawn in the frame —
   // map, buildings, water, our 3D objects, labels.
@@ -381,6 +391,11 @@ const LOOK_PANEL = [
   ['gradeSaturate', 'Grade: saturation', 0, 2, 0.01],
   ['gradeContrast', 'Grade: contrast', 0.5, 1.5, 0.01],
   ['gradeBrightness', 'Grade: brightness', 0.5, 1.5, 0.01],
+  ['waterDeep', 'Water deep', 'color'],
+  ['waterShallow', 'Water shallow', 'color'],
+  ['waterSun', 'Water glint color', 'color'],
+  ['waterOpacity', 'Water opacity', 0, 1, 0.01],
+  ['waterGlint', 'Water glint strength', 0, 1, 0.01],
 ];
 
 let lookPanelEl = null;
@@ -1574,7 +1589,7 @@ const WATER_LEVEL = -5; // metres below sea level the water sheet sits at
 function makeWaterMaterial() {
   if (!gfx().waterReflect) {
     return new THREE.MeshBasicMaterial({
-      color: 0x1f6a90, transparent: true, opacity: 0.82,
+      color: new THREE.Color(LOOK.waterDeep), transparent: true, opacity: LOOK.waterOpacity,
       side: THREE.DoubleSide, depthWrite: false,
     });
   }
@@ -1582,10 +1597,11 @@ function makeWaterMaterial() {
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
     uniforms: {
       uTime: { value: 0 },
-      uDeep: { value: new THREE.Color(0x114f74) },
-      uShallow: { value: new THREE.Color(0x3f9dc2) },
-      uSun: { value: new THREE.Color(0xffe4b0) },
-      uOpacity: { value: 0.85 },
+      uDeep: { value: new THREE.Color(LOOK.waterDeep) },
+      uShallow: { value: new THREE.Color(LOOK.waterShallow) },
+      uSun: { value: new THREE.Color(LOOK.waterSun) },
+      uOpacity: { value: LOOK.waterOpacity },
+      uGlint: { value: LOOK.waterGlint },
     },
     vertexShader: `
       varying vec3 vWorld;
@@ -1598,7 +1614,7 @@ function makeWaterMaterial() {
       precision highp float;
       uniform float uTime;
       uniform vec3 uDeep, uShallow, uSun;
-      uniform float uOpacity;
+      uniform float uOpacity, uGlint;
       varying vec3 vWorld;
 
       // Precision-stable hash (Dave Hoskins). The classic sin()-based hash
@@ -1630,7 +1646,7 @@ function makeWaterMaterial() {
         float s = noise(p * 0.03 + vec2(uTime * 0.22, uTime * 0.13))
                 + noise(p * 0.07 - vec2(uTime * 0.18, uTime * 0.11)) * 0.7;
         float glint = smoothstep(1.30, 1.66, s);
-        col += uSun * glint * 0.5;
+        col += uSun * glint * uGlint;
         gl_FragColor = vec4(col, uOpacity);
       }
     `,

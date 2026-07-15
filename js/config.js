@@ -208,6 +208,16 @@ export const LOOK = {
   gradeSaturate: 0.72,
   gradeContrast: 0.94,
   gradeBrightness: 1.04,
+
+  // --- Water ---
+  // Real bay water photographs as a gray-green mirror of the sky, not
+  // saturated navy (reference: lake #a09ea0, river #64605e). Glitter is
+  // kept but gentler and near-white, like real sun sparkle.
+  waterDeep: '#5f6a6d',
+  waterShallow: '#9aa4a5',
+  waterSun: '#e8e4d8',
+  waterOpacity: 0.85,
+  waterGlint: 0.35,
 };
 
 // Satellite imagery base. Free ESRI "World Imagery" tiles (no API key)
