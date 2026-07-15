@@ -241,6 +241,14 @@ export const LOOK = {
   // sunlit value), so the dark blobs get lighter. Length/direction now
   // follow the sun position automatically.
   shadowOpacity: 0.30,
+
+  // --- Camera texture: softness + grain ---
+  // The reference is 1080p video of a neural render: slightly soft, with
+  // mild luminance noise. A whisper of blur takes the razor-crisp "game
+  // render" edge off; a static grain overlay adds the video feel.
+  // Set both to 0 if you prefer the crisp look.
+  gradeBlur: 0.3,      // px — keep tiny; labels blur too
+  grainOpacity: 0.25,  // ≈ the reference's σ 2-3/255 luminance noise
 };
 
 // Satellite imagery base. Free ESRI "World Imagery" tiles (no API key)

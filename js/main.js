@@ -383,8 +383,35 @@ function applyLook() {
   if (canvas) {
     canvas.style.filter =
       `saturate(${LOOK.gradeSaturate}) contrast(${LOOK.gradeContrast})` +
-      ` brightness(${LOOK.gradeBrightness})`;
+      ` brightness(${LOOK.gradeBrightness})` +
+      (LOOK.gradeBlur > 0 ? ` blur(${LOOK.gradeBlur}px)` : '');
   }
+
+  // Film-grain overlay: a small tiled noise image on a div above the
+  // canvas (below the HUD). Static and seeded — captures stay identical.
+  let grain = document.getElementById('grain-overlay');
+  if (!grain) {
+    grain = document.createElement('div');
+    grain.id = 'grain-overlay';
+    grain.style.cssText =
+      'position:fixed;inset:0;pointer-events:none;z-index:4;' +
+      'background-repeat:repeat;image-rendering:pixelated';
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 128;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(128, 128);
+    const rand = mulberry32(4242);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = 118 + Math.floor(rand() * 20); // gray noise around mid
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    grain.style.backgroundImage = `url(${c.toDataURL()})`;
+    grain.style.mixBlendMode = 'overlay'; // brightens/darkens, no gray wash
+    document.body.appendChild(grain);
+  }
+  grain.style.opacity = LOOK.grainOpacity;
 }
 
 // --- The P-panel: sliders for every LOOK knob, applied live -------------
@@ -420,6 +447,8 @@ const LOOK_PANEL = [
   ['treeLight', 'Foliage lightness', 0.05, 0.6, 0.01],
   ['treeLightSpan', 'Foliage light variety', 0, 0.3, 0.01],
   ['shadowOpacity', 'Building shadow darkness', 0, 0.8, 0.01],
+  ['gradeBlur', 'Softness (blur px)', 0, 2, 0.05],
+  ['grainOpacity', 'Film grain', 0, 0.3, 0.005],
 ];
 
 let lookPanelEl = null;
