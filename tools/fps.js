@@ -17,6 +17,9 @@ const puppeteer = require('puppeteer-core');
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const extraQuery = process.argv[2] || '';
+// Optional second arg: full base URL (e.g. http://localhost:8081/) so a
+// baseline build served from another port can be measured back-to-back.
+const base = process.argv[3] || 'http://localhost:8080/';
 
 (async () => {
   const browser = await puppeteer.launch({
@@ -27,7 +30,7 @@ const extraQuery = process.argv[2] || '';
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
-    const url = 'http://localhost:8080/?shot=1' + (extraQuery ? '&' + extraQuery : '');
+    const url = base + '?shot=1' + (extraQuery ? '&' + extraQuery : '');
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForFunction('window.__shotReady === true', { timeout: 90000 });
     await new Promise((r) => setTimeout(r, 2000)); // let tiles/labels settle

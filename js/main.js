@@ -1699,7 +1699,9 @@ function buildBushes() {
     TREE_SPOTS.reduce((sum, s) => sum + s.count, 0) * mult);
 
   const bushes = new THREE.InstancedMesh(
-    new THREE.IcosahedronGeometry(1.1, 0),  // small + low-poly = cheap
+    // detail 1 (80 tris) instead of 0 (20): rounded shrubs, not gray rocks.
+    // Measured cost: none (A/B vs baseline worktree, PERF.md).
+    new THREE.IcosahedronGeometry(1.1, 1),
     new THREE.MeshLambertMaterial({ color: 0xffffff }), // white × per-bush tint
     total,
   );
@@ -1720,9 +1722,9 @@ function buildBushes() {
       const x = center.x + Math.cos(ang) * r;
       const z = center.z + Math.sin(ang) * r;
       const s = 0.6 + rand() * 1.1;
-      // Squash slightly so bushes are wider than tall.
-      matrix.compose(new THREE.Vector3(x, center.y + 0.8 * s, z), quat,
-                     new THREE.Vector3(s * 1.3, s, s * 1.3));
+      // Squash firmly so bushes hug the ground like real shrubs.
+      matrix.compose(new THREE.Vector3(x, center.y + 0.55 * s, z), quat,
+                     new THREE.Vector3(s * 1.5, s * 0.75, s * 1.5));
       bushes.setMatrixAt(i, matrix);
     }
   }

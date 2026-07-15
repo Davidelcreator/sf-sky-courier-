@@ -230,11 +230,11 @@ export const LOOK = {
   // Real trees photograph OLIVE, not "game green": reference sample
   // #5e5e40 has red ≈ green. Hue 0.17 (yellow-green), low saturation.
   // Each tree/bush still varies around these base values.
-  treeHue: 0.17,
-  treeHueSpan: 0.05,
-  treeSat: 0.30,
-  treeLight: 0.28,
-  treeLightSpan: 0.12,
+  treeHue: 0.16,
+  treeHueSpan: 0.09,   // wider hue range: yellow-olive through green-olive
+  treeSat: 0.35,
+  treeLight: 0.26,
+  treeLightSpan: 0.16, // more tree-to-tree lightness variety
   // Multi-lobed canopies: each tree is 1–4 overlapping leaf-blobs, the
   // top one sun-lit, the lower ones shadowed — real trees are clumps,
   // not spheres, and light filters from above (see ref frames 060/111).
