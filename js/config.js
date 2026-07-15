@@ -248,13 +248,14 @@ export const BRIDGES = [
     color: 0xb8bcc4,            // silver-gray steel
     deckHeight: 67,
     towerHeight: 160,
-    // OSM already renders the two real west-span towers as gray buildings,
-    // so we DON'T draw our own (that caused duplicate towers) — we just
-    // drape the cables over the real tower positions.
-    drawTowers: false,
+    // OSM's plain gray tower boxes are hidden (see OSM_HIDE_IDS) and we
+    // draw our own PORTAL towers instead: two legs that straddle the
+    // roadway so traffic passes BETWEEN them, like the real bridge.
+    drawTowers: true,
+    towerStyle: 'portal',
     towers: [
-      [-122.38582, 37.79075],   // SW main tower (from OSM building)
-      [-122.36990, 37.80562],   // NE main tower (from OSM building)
+      [-122.38582, 37.79075],   // SW main tower (matches the OSM tower)
+      [-122.36990, 37.80562],   // NE main tower (matches the OSM tower)
     ],
     cableAnchors: [[-122.3894763, 37.7873614], [-122.3682156, 37.8072151]],
     deck: [
@@ -269,9 +270,12 @@ export const BRIDGES = [
     color: 0xf2f2f2,            // the new span's white tower
     deckHeight: 25,
     towerHeight: 160,
-    // OSM renders the real single SAS tower — use it, don't duplicate it.
-    drawTowers: false,
-    towers: [[-122.35851, 37.81527]], // the real OSM tower position
+    // The real eastern span has ONE central tower with the roadway split
+    // around it. We hide OSM's gray box (see OSM_HIDE_IDS) and draw a slim
+    // white pylon in the median, so lanes pass on BOTH sides of it.
+    drawTowers: true,
+    towerStyle: 'central',
+    towers: [[-122.35851, 37.81527]], // the real tower position
     cableAnchors: [[-122.3606373, 37.8133549], [-122.3552524, 37.8168580]],
     piers: true,
     deck: [
@@ -328,6 +332,19 @@ export const BRIDGES = [
       [-122.1070000, 37.5150000],   // ground, Fremont
     ],
   },
+];
+
+// OpenStreetMap extrudes the Bay Bridge's towers as plain gray boxes that
+// sit right on the roadway (so traffic couldn't get past) and clash with
+// the nicer towers we draw ourselves. We hide those specific buildings by
+// their stable OSM feature id — both from the map (a layer filter) AND
+// from the car's collision check, so the deck stays fully drivable through
+// the tower area. (Filtering by a bounding box with MapLibre's `within`
+// expression proved unreliable here; the feature id is exact.)
+export const OSM_HIDE_IDS = [
+  2377351912,   // Bay Bridge east — SAS (single central) tower
+  4327124760,   // Bay Bridge west — SW tower
+  4327124792,   // Bay Bridge west — NE tower
 ];
 
 // Trees! Each spot scatters `count` simple trees within `radius` meters

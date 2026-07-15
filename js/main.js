@@ -27,7 +27,7 @@ import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders
 // what makes "the new button does nothing" bugs happen.)
 const V = new URL(import.meta.url).search;
 const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
-        SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS } =
+        SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS, OSM_HIDE_IDS } =
   await import('./config.js' + V);
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
@@ -206,6 +206,15 @@ function initGame() {
     },
     firstSymbolId,
   );
+
+  // Hide the tall gray boxes OSM extrudes for the Bay Bridge towers: we
+  // draw nicer towers ourselves, and removing the blocks lets the roadway
+  // run clear between/around them. We match by stable OSM feature id
+  // because a location-based `within` filter proved unreliable here.
+  // ['id'] is each feature's id; hide any whose id is in our list.
+  if (OSM_HIDE_IDS && OSM_HIDE_IDS.length) {
+    map.setFilter('3d-buildings', ['!', ['in', ['id'], ['literal', OSM_HIDE_IDS]]]);
+  }
 
   // Our three.js layer (car, beacon) is added last so it draws with
   // full knowledge of the buildings' depth — that's what lets a
@@ -1083,29 +1092,55 @@ function buildBridges() {
     const across = new THREE.Vector3(-along.z, 0, along.x);
 
     if (b.drawTowers) {
-      // Chunkier legs: 6.5 m wide and 9 m DEEP so the tower still reads as
-      // a solid tower when seen end-on (before it looked like a thin pole).
+      // Two tower shapes, chosen per bridge in config:
+      //  • 'portal'  — two legs that STRADDLE the roadway (suspension
+      //                towers like the Bay Bridge west span). Cars drive
+      //                between the legs; cross-struts start above traffic.
+      //  • 'central' — one slim pylon that sits IN the median (the newer
+      //                east span's single tower), so lanes pass either side.
+      const style = b.towerStyle || 'portal';
+
+      // Reusable geometry for portal legs/struts (legs sit at ±legX, well
+      // outside the 22 m deck, whose half-width is 11 m).
+      const legX = 15;
       const legGeo = new THREE.BoxGeometry(6.5, b.towerHeight, 9);
-      const beamGeo = new THREE.BoxGeometry(25, 5, 10);
+      const strutGeo = new THREE.BoxGeometry(2 * legX + 6.5, 4.5, 10);
+
       for (const top of towerTops) {
         const tower = new THREE.Group();
-        for (const side of [-1, 1]) {
-          const leg = new THREE.Mesh(legGeo, mat);
-          leg.position.set(9 * side, b.towerHeight / 2, 0);
-          tower.add(leg);
+
+        if (style === 'central') {
+          // A single tapered column. CylinderGeometry with 4 sides makes a
+          // square shaft; a smaller top radius than bottom gives the taper.
+          // Kept slim (≈6 m at the base) so it fits between the traffic lanes.
+          const pylon = new THREE.Mesh(
+            new THREE.CylinderGeometry(2.4, 4.2, b.towerHeight, 4),
+            mat,
+          );
+          pylon.position.y = b.towerHeight / 2;
+          tower.add(pylon);
+        } else {
+          // Portal: two legs straddling the road...
+          for (const side of [-1, 1]) {
+            const leg = new THREE.Mesh(legGeo, mat);
+            leg.position.set(legX * side, b.towerHeight / 2, 0);
+            tower.add(leg);
+          }
+          // ...tied together by cross-struts. The LOWEST sits above the
+          // deck (deckHeight + 12) so vehicles pass under it; the rest
+          // climb the tower for the classic portal-frame look.
+          for (const by of [b.deckHeight + 12, b.towerHeight * 0.55,
+                             b.towerHeight * 0.78, b.towerHeight * 0.97]) {
+            const strut = new THREE.Mesh(strutGeo, mat);
+            strut.position.y = by;
+            tower.add(strut);
+          }
         }
-        // Four crossbeams up the tower give it the portal-frame look.
-        for (const f of [0, 0.5, 0.75, 0.96]) {
-          const beamY = f === 0 ? b.deckHeight : b.towerHeight * f;
-          const beam = new THREE.Mesh(beamGeo, mat);
-          beam.position.y = beamY;
-          tower.add(beam);
-        }
+
         tower.position.set(top.x, 0, top.z);
-        // Orient the tower so its legs straddle ACROSS the road. The legs
-        // sit at local ±X, so local Z must run ALONG the bridge — which is
-        // exactly what atan2(along.x, along.z) gives. (An earlier +90° here
-        // turned the legs the wrong way, making towers look misaligned.)
+        // Orient the tower so its local Z runs ALONG the bridge (legs then
+        // straddle ACROSS the road). atan2(along.x, along.z) does exactly
+        // that. (An earlier +90° here turned the legs the wrong way.)
         tower.rotation.y = Math.atan2(along.x, along.z);
         group.add(tower);
       }
@@ -1115,8 +1150,12 @@ function buildBridges() {
     // Between two towers it sags almost to the deck; elsewhere it just
     // droops a little. One cable per side of the roadway.
     const chain = [anchorA, ...towerTops, anchorB];
-    for (const side of [-1, 1]) {
-      const off = across.clone().multiplyScalar(9 * side);
+    // A central pylon carries a single cable plane down the middle; a
+    // portal tower carries one cable along each edge of the deck (±11 m).
+    const cableSides = b.towerStyle === 'central' ? [0] : [-1, 1];
+    const cableOff = b.towerStyle === 'central' ? 0 : 11;
+    for (const side of cableSides) {
+      const off = across.clone().multiplyScalar(cableOff * side);
       for (let i = 0; i < chain.length - 1; i++) {
         const p = chain[i].clone().add(off);
         const q = chain[i + 1].clone().add(off);
@@ -1834,6 +1873,9 @@ function refreshBuildingCache(nowMs) {
 
   buildingCache.list = [];
   for (const f of feats) {
+    // Skip the Bay Bridge tower boxes we hide from the map — otherwise the
+    // car would still crash into an invisible 160 m block on the roadway.
+    if (OSM_HIDE_IDS && OSM_HIDE_IDS.includes(f.id)) continue;
     const height = f.properties.render_height ?? 5;
     // A Polygon is a list of rings (outline + holes); a MultiPolygon is
     // a list of polygons. Flatten both cases into "list of ring-lists".
