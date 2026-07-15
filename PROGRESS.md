@@ -14,3 +14,13 @@ Every step: change → `npm run shot` (launch check + capture) → judge vs
 | 6 | Foliage: HSL(0.29,0.55) greens → olive LOOK knobs (hue .17, sat .30), live retintFoliage() | step6_foliage.png | **closer** — trees stop glowing; olive blends with imagery like ref frames. Launch check OK. |
 | 7 | Shadows: length derived from sun elevation (was hard-coded 1.7 = 30° sun), opacity → LOOK.shadowOpacity 0.30 | step7_shadows.png (q=high) | **no visible difference** in the default frame (satellite imagery's baked shadows dominate; ours are deliberately subtle at 0.30) — kept anyway as a correctness alignment: without it the item-1 sun move would leave 30°-length shadows under a 40° sun, and the P-panel sun slider now moves shadows correctly. Launch check OK. |
 | 8 | Camera texture: blur 0.3px + seeded grain overlay (opacity 0.25 ≈ ref σ2-3/255) | step8_grain.png | **closer (subtle by design)** — grain measured ±2 luma on flat surfaces, matching reference video noise; crisp game edge softened sub-pixel. First tries (0.05, 0.15) measured too weak. Launch check OK. |
+
+## Wrap-up (all 8 GAP items done)
+- Final shots: `shots/before.png` → `shots/after.png` (`compare_final.png` = stacked).
+- Normal play mode verified separately: boots with zero page errors, Enter starts,
+  grade + grain active (scratch check script, headless).
+- FPS: every change is config values, one CSS filter, and a static overlay div —
+  no per-frame CPU/GPU work added; no measurable framerate risk.
+- NOT attempted (flagged in GAP.md, need explicit go-ahead): real per-pixel fog on
+  MapLibre buildings, true soft shadows, glass reflections, motion blur.
+- Every knob is in LOOK (config.js); press P in-game for live sliders.
