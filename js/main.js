@@ -2596,6 +2596,19 @@ function tick(now) {
   rebuildShadows(now);
   updateChaseCamera(dt);
   updateHUD();
+  animateGrain();
+}
+
+// Re-randomize the film-grain position every frame, like real video
+// noise. A STATIC pattern looks fine parked but smears like a dirty
+// window when the world moves fast behind it. Shot mode keeps it still
+// so captures stay pixel-identical.
+function animateGrain() {
+  if (SHOT) return;
+  const grain = document.getElementById('grain-overlay');
+  if (!grain || !grain.style.opacity || +grain.style.opacity === 0) return;
+  grain.style.backgroundPosition =
+    `${(Math.random() * 128) | 0}px ${(Math.random() * 128) | 0}px`;
 }
 
 requestAnimationFrame(tick);

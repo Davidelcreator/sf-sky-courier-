@@ -24,3 +24,4 @@ Every step: change → `npm run shot` (launch check + capture) → judge vs
 - NOT attempted (flagged in GAP.md, need explicit go-ahead): real per-pixel fog on
   MapLibre buildings, true soft shadows, glass reflections, motion blur.
 - Every knob is in LOOK (config.js); press P in-game for live sliders.
+| 9 | Grain animates per-frame during play (static only in shot mode) | step9_graincheck.png | fix for David's report: static grain smeared like a dirty window at high speed. Verified animating in live tab; captures unchanged. Launch check OK. |
