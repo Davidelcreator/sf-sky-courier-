@@ -13,12 +13,10 @@ FPS = requestAnimationFrame count over 5 s, measured in David's real Chrome
 | 2 | medium | 40.6 |
 | 3 | high | 40.5 |
 
-Note: medium ≡ high within noise → at this camera we are NOT GPU-bound;
-the ~41 ceiling is most likely Chrome throttling a visible-but-unfocused
-window (the game runs full-speed when the window has focus). The numbers
-are still valid as a *relative* budget: any detail change is measured the
-same way in the same session and compared against a fresh same-session
-baseline.
+Note: medium == high within noise. UPDATE: tools/fps.js (headless, real GPU,
+never focus-throttled) measures ~43-44 at the same camera, matching the
+in-window 41 - so ~41-44 IS the true scene cost at this camera (satellite +
+terrain + extrusions at pitch 72), not a throttle cap as first suspected.
 
 ## The floor
 **40 fps at the capture camera, same-session methodology.** Any change
@@ -28,4 +26,5 @@ baseline beyond noise (±1.5) — gets reverted, per the contract.
 ## Log (updated after every change)
 | Change | FPS after | Verdict |
 |---|---|---|
-| (baseline) | 41 | — |
+| (baseline) | 41 in-window / 44 headless-GPU | — |
+| D1 multi-lobe two-tone canopies (3,564 instanced lobes) | 43.3 | PASS (>= 40 floor; delta within noise) |

@@ -235,6 +235,13 @@ export const LOOK = {
   treeSat: 0.30,
   treeLight: 0.28,
   treeLightSpan: 0.12,
+  // Multi-lobed canopies: each tree is 1–4 overlapping leaf-blobs, the
+  // top one sun-lit, the lower ones shadowed — real trees are clumps,
+  // not spheres, and light filters from above (see ref frames 060/111).
+  treeLobes: 3,        // blobs per tree (1 = old lollipop look)
+  treeLobeSpread: 1.0, // how far side-blobs sit from the middle
+  treeTopLight: 1.35,  // sunlit top blob: lightness ×
+  treeUnderDark: 0.62, // shadowed lower blobs: lightness ×
 
   // --- Building shadows (High quality only) ---
   // Reference shadows are soft and lifted (shadowed ground ≈ 60% of the

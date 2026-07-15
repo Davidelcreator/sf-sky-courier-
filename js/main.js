@@ -359,8 +359,9 @@ function applyLook() {
     }
   }
 
-  // Foliage tint (trees + bushes) — live restyle of every instance.
-  retintFoliage();
+  // Foliage (trees + bushes) — re-lay-out canopy lobes and restyle every
+  // instance live (rebuildTreeLobes retints internally).
+  rebuildTreeLobes();
 
   // Building-shadow darkness (the geometry itself follows the sun on its
   // next once-a-second rebuild).
@@ -446,6 +447,10 @@ const LOOK_PANEL = [
   ['treeSat', 'Foliage saturation', 0, 1, 0.01],
   ['treeLight', 'Foliage lightness', 0.05, 0.6, 0.01],
   ['treeLightSpan', 'Foliage light variety', 0, 0.3, 0.01],
+  ['treeLobes', 'Tree lobes (1=ball)', 1, 4, 1],
+  ['treeLobeSpread', 'Tree lobe spread', 0.3, 2, 0.05],
+  ['treeTopLight', 'Canopy sunlit top ×', 1, 1.6, 0.02],
+  ['treeUnderDark', 'Canopy shadow under ×', 0.4, 1, 0.02],
   ['shadowOpacity', 'Building shadow darkness', 0, 0.8, 0.01],
   ['gradeBlur', 'Softness (blur px)', 0, 2, 0.05],
   ['grainOpacity', 'Film grain', 0, 0.3, 0.005],
@@ -1541,16 +1546,20 @@ function buildTrees() {
     new THREE.MeshLambertMaterial({ color: 0x6b4a2f }),
     total,
   );
+  // Canopies are LOBES: up to 4 leaf-blobs per tree (LOOK.treeLobes),
+  // so we allocate the instanced mesh at trees × 4 and let
+  // rebuildTreeLobes() decide how many are actually shown.
+  const MAX_LOBES = 4;
   const canopies = new THREE.InstancedMesh(
-    new THREE.IcosahedronGeometry(2.4, 1),
-    new THREE.MeshLambertMaterial({ color: 0xffffff }), // white × per-tree tint
-    total,
+    new THREE.IcosahedronGeometry(1.9, 1),
+    new THREE.MeshLambertMaterial({ color: 0xffffff }), // white × per-lobe tint
+    total * MAX_LOBES,
   );
 
   const rand = mulberry32(42);
   const matrix = new THREE.Matrix4();
   const quat = new THREE.Quaternion();
-  const color = new THREE.Color();
+  const trees = []; // per-tree placement + shape, consumed by rebuildTreeLobes
   let i = 0;
 
   for (const spot of TREE_SPOTS) {
@@ -1570,38 +1579,114 @@ function buildTrees() {
                      new THREE.Vector3(s, s, s));
       trunks.setMatrixAt(i, matrix);
 
-      matrix.compose(new THREE.Vector3(x, center.y + 4.4 * s, z), quat,
-                     new THREE.Vector3(s, s, s));
-      canopies.setMatrixAt(i, matrix);
+      // Shape factors give silhouette VARIETY: wide+low (spreading),
+      // narrow+tall (columnar) and everything between.
+      trees.push({
+        x, z, y: center.y + 4.4 * s, s,
+        shapeH: 0.7 + rand() * 1.0,   // horizontal spread of side lobes
+        shapeV: 0.75 + rand() * 0.8,  // vertical stretch of the crown
+      });
     }
   }
-  trunks.count = i; canopies.count = i; // only render the instances we filled
+  trunks.count = i;
 
-  // Canopy colors come from LOOK (see retintFoliage) so the P-panel
-  // sliders can restyle every tree live.
   three.canopies = canopies;
-  retintFoliage();
+  three.treeData = trees;
+  rebuildTreeLobes(); // positions every lobe + tints (reads LOOK)
 
   const group = new THREE.Group();
   group.add(trunks, canopies);
   return group;
 }
 
-// Color every tree canopy and bush from the LOOK foliage knobs. Its own
-// seeded random stream keeps the per-plant variety identical run to run.
+// Lay out every canopy lobe from LOOK's tree knobs. Lobe 0 is the crown
+// (top, sun-lit); the others huddle around/below it (shadowed). Called at
+// build and again by the P-panel sliders — 3k matrix writes is cheap.
+function rebuildTreeLobes() {
+  const mesh = three.canopies;
+  const trees = three.treeData;
+  if (!mesh || !trees) return;
+  const L = Math.max(1, Math.min(4, Math.round(LOOK.treeLobes)));
+  const rand = mulberry32(2025);
+  const matrix = new THREE.Matrix4();
+  const quat = new THREE.Quaternion();
+  const pos = new THREE.Vector3();
+  const scl = new THREE.Vector3();
+  // Remember each lobe's height within its tree (0 = lowest, 1 = crown):
+  // retintFoliage tones lobes by height, so sun-lit tops and shadowed
+  // undersides show from EVERY angle, not just from above.
+  const heights = new Float32Array(trees.length * L);
+  let idx = 0;
+  for (const t of trees) {
+    for (let j = 0; j < L; j++) {
+      let yOff;
+      if (j === 0) {
+        // The crown: biggest lobe, sits highest, stretched by shapeV.
+        yOff = 0.55 * t.s * t.shapeV;
+        pos.set(t.x, t.y + yOff, t.z);
+        scl.set(1.1 * t.s, 1.1 * t.s * t.shapeV, 1.1 * t.s);
+      } else {
+        // Side lobes: ring around the crown, spanning low to almost-top,
+        // so the height-toning paints visible dappling on the silhouette.
+        const a = rand() * Math.PI * 2;
+        const rr = LOOK.treeLobeSpread * (0.55 + rand() * 0.65) * t.s * t.shapeH;
+        const sc = t.s * (0.75 + rand() * 0.45);
+        yOff = (rand() * 1.1 - 0.55) * t.s;
+        pos.set(t.x + Math.cos(a) * rr, t.y + yOff, t.z + Math.sin(a) * rr);
+        scl.set(sc * 1.05, sc * 0.85, sc * 1.05);
+      }
+      // Normalize height into 0..1 across the lobe span (-0.55s .. +0.55s·shapeV).
+      heights[idx] = Math.max(0, Math.min(1, (yOff / t.s + 0.55) / (0.55 + 0.55 * t.shapeV)));
+      matrix.compose(pos, quat, scl);
+      mesh.setMatrixAt(idx++, matrix);
+    }
+  }
+  mesh.count = idx;
+  mesh.instanceMatrix.needsUpdate = true;
+  three.lobeHeights = heights;
+  retintFoliage();
+}
+
+// Color every canopy lobe and bush from the LOOK foliage knobs. Each TREE
+// gets its own hue/lightness; within a tree the crown lobe is sun-lit
+// (×treeTopLight) and the lower lobes shadowed (×treeUnderDark) — that
+// two-tone is what makes light read as filtering through the canopy.
+// Seeded streams keep the variety identical run to run.
 function retintFoliage() {
   const color = new THREE.Color();
-  for (const [mesh, lightMult] of [[three.canopies, 1], [three.bushes, 0.9]]) {
-    if (!mesh) continue;
+
+  const canopies = three.canopies;
+  if (canopies && three.treeData) {
+    const L = Math.max(1, Math.min(4, Math.round(LOOK.treeLobes)));
     const rand = mulberry32(7331);
-    for (let i = 0; i < mesh.count; i++) {
-      mesh.setColorAt(i, color.setHSL(
+    let idx = 0;
+    for (const t of three.treeData) {
+      const hue = LOOK.treeHue + rand() * LOOK.treeHueSpan;
+      const light = LOOK.treeLight + rand() * LOOK.treeLightSpan;
+      for (let j = 0; j < L; j++) {
+        // Tone by the lobe's height in the canopy: shadowed at the
+        // bottom, sun-lit at the crown, a little jitter for dappling.
+        const h = three.lobeHeights ? three.lobeHeights[idx] : 1;
+        const tone = LOOK.treeUnderDark
+          + (LOOK.treeTopLight - LOOK.treeUnderDark) * h
+          + (rand() - 0.5) * 0.12;
+        canopies.setColorAt(idx++, color.setHSL(hue, LOOK.treeSat, light * tone));
+      }
+    }
+    if (canopies.instanceColor) canopies.instanceColor.needsUpdate = true;
+  }
+
+  const bushes = three.bushes;
+  if (bushes) {
+    const rand = mulberry32(9713);
+    for (let i = 0; i < bushes.count; i++) {
+      bushes.setColorAt(i, color.setHSL(
         LOOK.treeHue + rand() * LOOK.treeHueSpan,
         LOOK.treeSat,
-        (LOOK.treeLight + rand() * LOOK.treeLightSpan) * lightMult,
+        (LOOK.treeLight + rand() * LOOK.treeLightSpan) * 0.85,
       ));
     }
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    if (bushes.instanceColor) bushes.instanceColor.needsUpdate = true;
   }
 }
 
