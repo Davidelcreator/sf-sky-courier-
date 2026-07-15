@@ -297,6 +297,25 @@ export const BUILDING_COLORS = [
 // The flatdem:// prefix routes tiles through our ocean-flattening
 // filter in main.js (the raw data includes the sea FLOOR, which would
 // render the bay as a giant pit).
+// ============================================================
+// 3D ROAD NETWORK — data-driven ramps, overpasses and tunnels
+// ============================================================
+// The vector tiles tag every way with brunnel (bridge/tunnel), ramp=1
+// (on/off-ramps) and layer (vertical stacking). ROADS3D turns those into
+// drivable sloped geometry near the player. All knobs on the P panel.
+export const ROADS3D = {
+  ENABLED: true,
+  LIFT_PER_LAYER: 7,    // metres of elevation per OSM layer step (default layer=1)
+  TAPER_M: 50,          // metres over which a bridge end descends to its junction
+  MAX_GRADE: 0.10,      // steepest allowed ramp (rise/run) before we flag it
+  PILLAR_EVERY_M: 40,   // support spacing under elevated ways
+  REFRESH_MS: 2500,     // rebuild cadence
+  RADIUS_M: 1500,       // build roads within this range of the car
+  // Ribbon width (metres) by road class; anything missing uses `default`.
+  WIDTHS: { motorway: 9, trunk: 9, primary: 8, secondary: 7, tertiary: 6.5,
+            minor: 6, service: 5, default: 6, ramp: 5.5 },
+};
+
 export const TERRAIN = {
   ENABLED: true,       // set false if an older phone struggles
   EXAGGERATION: 1.0,   // 1 = true-to-life; 1.5 = drama-documentary hills
@@ -328,6 +347,9 @@ export const BRIDGES = [
     color: 0xd1451e,            // International Orange, its real paint!
     deckHeight: 67,
     towerHeight: 227,
+    // South end previously charted at the WATERLINE below Fort Point, so
+    // the deck stopped 65 m up in mid-air (unreachable). It now lands on
+    // the real toll plaza. (See ROADS.md, Phase 1 audit.)
     // OSM already models the real towers in fine detail (dozens of parts),
     // so we DON'T draw our own — but our height-based tint paints them the
     // wrong colour. recolorTowers repaints just those parts orange instead.
@@ -336,7 +358,7 @@ export const BRIDGES = [
     towers: [[-122.4778921, 37.8140144], [-122.4792343, 37.8255026]],
     cableAnchors: [[-122.4775337, 37.8109470], [-122.4795927, 37.8285700]],
     deck: [
-      [-122.4771673, 37.8078108, 65],   // ground, SF side (Presidio bluff)
+      [-122.4756990, 37.8075800, 56],   // ground, SF side: ON the US-101 plaza roadway (terrain measured 56 m)
       [-122.4775337, 37.8109470],
       [-122.4795927, 37.8285700],
       [-122.4799591, 37.8317062, 70],   // ground, Marin headlands

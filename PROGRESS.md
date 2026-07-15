@@ -42,3 +42,9 @@ Every step: change → `npm run shot` (launch check + capture) → judge vs
   future A/Bs). Absolute numbers drifted with machine load (44 -> 39 -> 33 over
   the session) — the A/B method is the only honest signal on this box.
 - New LOOK sliders: tree lobes/spread/top-light/under-dark, facade windows.
+
+## Road network (feature/road-network)
+| Phase | Result | Evidence |
+|---|---|---|
+| 1 audit | tiles carry brunnel/ramp/layer everywhere, game ignored all of it; GG deck south end floated mid-air over the waterline | ROADS.md, shots/gg_baseline.png/json |
+| 2 ramps | ROADS3D system: node-graph junction heights, tapered bridge ends, true end-to-end ramp slopes, box-strip ribbons + pillars, physics + traffic ride them. GG deck foot moved onto the real toll-plaza roadway (measured 56 m). GG towers made pass-through (OSM footprint spanned the deck; real road runs between the legs). Acceptance drive PASS 16/16: surface street → parkway → over generated overpasses → ramp → mid-span at alt 67 / 137 mph, no falls (3 earlier fails diagnosed honestly: foot 9 m too high; autopilot too fast for lane; tower collision). FPS A/B 43.95 vs 42.65 — within noise. | shots/gg_accept.png/json, shots/roads_gg_approach.png |

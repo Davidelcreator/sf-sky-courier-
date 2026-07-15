@@ -25,6 +25,8 @@ const name = process.argv[2] || 'drive';
 const wpArg = process.argv[3];
 const heading = parseFloat(process.argv[4] || 'NaN');
 const maxSec = parseFloat(process.argv[5] || '90');
+const mphCap = parseFloat(process.argv[6] || '150'); // sane test speed — the
+// 100 ms steering tick can't hold a 570 mph car inside a 13 m lane corridor
 if (!wpArg) { console.error('usage: node tools/drive.js name "lng,lat;lng,lat;..."'); process.exit(2); }
 const waypoints = wpArg.split(';').map((s) => s.split(',').map(Number));
 
@@ -47,7 +49,7 @@ const waypoints = wpArg.split(';').map((s) => s.split(',').map(Number));
     await new Promise((r) => setTimeout(r, 1500));
 
     // Install the autopilot + telemetry inside the page.
-    await page.evaluate((wps, maxS) => {
+    await page.evaluate((wps, maxS, cap) => {
       game.noBlurReset = true;
       window.__drive = { wp: 1, log: [], done: false, fail: null, t0: performance.now() };
       const D = window.__drive;
@@ -69,7 +71,11 @@ const waypoints = wpArg.split(';').map((s) => s.split(',').map(Number));
         // moves it; ground/deck clamps and collisions all stay real).
         c.heading = Math.atan2(dx, dy);
         game.state.camHeading = c.heading;
-        game.keys.forward = true;
+        // Throttle only below the speed cap — the 100 ms steering tick
+        // can't hold a 570 mph car inside a lane; test at sane speed.
+        const mph = Math.hypot(c.vx, c.vy) * 2.237;
+        game.keys.forward = mph < cap;
+        game.keys.back = mph > cap * 1.15;
       }, 100);
       setInterval(() => {
         if (D.done) return;
@@ -82,18 +88,20 @@ const waypoints = wpArg.split(';').map((s) => s.split(',').map(Number));
           mph: Math.round(Math.hypot(c.vx, c.vy) * 2.237),
         });
       }, 250);
-    }, waypoints, maxSec);
+    }, waypoints, maxSec, mphCap);
 
     await page.waitForFunction('window.__drive.done === true', { timeout: (maxSec + 20) * 1000 });
     const result = await page.evaluate(() => window.__drive);
 
-    // Analyze the log for falls / teleports.
+    // Analyze the log for falls / teleports / water landings.
     let verdict = result.fail ? 'FAIL: ' + result.fail : 'PASS';
     for (let i = 1; i < result.log.length; i++) {
       const a = result.log[i - 1], b = result.log[i];
       const jump = Math.hypot((b.lng - a.lng) * 88000, (b.lat - a.lat) * 111320);
       if (b.alt - a.alt < -15) verdict = `FAIL: fell ${(a.alt - b.alt).toFixed(0)}m at t=${b.t}s (wp ${b.wp})`;
       if (jump > 80) verdict = `FAIL: teleported ${Math.round(jump)}m at t=${b.t}s`;
+      // Skimming the sea (alt≈0 with the seabed below) = fell off a road.
+      if (b.alt <= 0.5 && b.ground < -2) verdict = `FAIL: landed on water at t=${b.t}s (wp ${b.wp})`;
     }
     const outJson = path.join(OUT_DIR, name + '.json');
     fs.writeFileSync(outJson, JSON.stringify({ verdict, waypoints, log: result.log }, null, 1));

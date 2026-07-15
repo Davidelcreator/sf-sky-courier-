@@ -27,7 +27,8 @@ import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders
 // what makes "the new button does nothing" bugs happen.)
 const V = new URL(import.meta.url).search;
 const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
-        SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS, OSM_HIDE_IDS, LOOK } =
+        SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS, OSM_HIDE_IDS, LOOK,
+        ROADS3D } =
   await import('./config.js' + V);
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
@@ -513,6 +514,11 @@ const LOOK_PANEL = [
   ['windowOpacity', 'Facade windows (0=off)', 0, 1, 0.02],
   ['gradeBlur', 'Softness (blur px)', 0, 2, 0.05],
   ['grainOpacity', 'Film grain', 0, 0.3, 0.005],
+  // 'r3:'-prefixed keys live in ROADS3D (the 3D road network) instead of
+  // LOOK; changing one forces the road geometry to rebuild.
+  ['r3:LIFT_PER_LAYER', 'Overpass lift m/layer', 3, 15, 0.5],
+  ['r3:TAPER_M', 'Bridge-end taper m', 15, 120, 5],
+  ['r3:PILLAR_EVERY_M', 'Pillar spacing m', 15, 100, 5],
 ];
 
 let lookPanelEl = null;
@@ -530,27 +536,32 @@ function toggleLookPanel() {
     'max-height:85vh;overflow-y:auto;width:270px';
   el.innerHTML = '<b>THE LOOK</b> <small>(P to close — values in config.js LOOK)</small><br>';
   for (const row of LOOK_PANEL) {
-    const [key, label] = row;
+    const [rawKey, label] = row;
+    // 'r3:' rows edit the ROADS3D config (3D road network) instead of LOOK.
+    const isRoad = rawKey.startsWith('r3:');
+    const obj = isRoad ? ROADS3D : LOOK;
+    const key = isRoad ? rawKey.slice(3) : rawKey;
     const wrap = document.createElement('label');
     wrap.style.cssText = 'display:block;margin-top:4px';
     const isColor = row[2] === 'color';
     const val = document.createElement('span');
-    val.textContent = ' ' + LOOK[key];
+    val.textContent = ' ' + obj[key];
     const input = document.createElement('input');
     if (isColor) {
       input.type = 'color';
-      input.value = LOOK[key];
+      input.value = obj[key];
     } else {
       input.type = 'range';
       input.min = row[2]; input.max = row[3]; input.step = row[4];
-      input.value = LOOK[key];
+      input.value = obj[key];
       input.style.width = '130px';
     }
     input.style.verticalAlign = 'middle';
     input.addEventListener('input', () => {
-      LOOK[key] = isColor ? input.value : parseFloat(input.value);
-      val.textContent = ' ' + LOOK[key];
-      applyLook();
+      obj[key] = isColor ? input.value : parseFloat(input.value);
+      val.textContent = ' ' + obj[key];
+      if (isRoad) road3D.lastRefresh = -Infinity; // force a road rebuild
+      else applyLook();
     });
     wrap.append(label + ' ', input, val);
     el.appendChild(wrap);
@@ -1298,6 +1309,253 @@ function closestOnPolylineXZ(pts, target) {
 // (where the pylon stands) and then closes again — the real Bay Bridge
 // east span. We walk the centreline in short steps and, at each step,
 // work out how wide that central gap should be.
+// ============================================================
+// 3D ROAD NETWORK (ROADS3D) — data-driven ramps / overpasses / tunnels
+// ============================================================
+// The vector tiles tag ways with brunnel=bridge|tunnel, ramp=1 and layer.
+// Every ~2.5 s we rebuild sloped ribbon geometry for the tagged ways near
+// the car, with junction heights solved on a little node graph so ramps
+// climb to the decks they join (see ROADS.md for the model).
+
+const road3D = {
+  group: null, segs: [], lastRefresh: -Infinity, lng: null, lat: null,
+  fallbacks: new Map(), // message -> count (logged once, reported at end)
+};
+const R3_DRIVABLE = new Set(['motorway', 'trunk', 'primary', 'secondary',
+                             'tertiary', 'minor', 'service']);
+
+function logRoadFallback(msg) {
+  const n = (road3D.fallbacks.get(msg) || 0) + 1;
+  road3D.fallbacks.set(msg, n);
+  if (n === 1) console.log('[roads3d fallback] ' + msg);
+}
+
+// Height of a generated 3D road at a point, or null when not over one.
+// Mirrors bridgeDeckHeightAt but over the dynamic cache (per-way widths).
+function road3DHeightAt(lng, lat) {
+  const mLng = METERS_PER_DEG_LAT * Math.cos(lat * DEG);
+  let best = null;
+  for (const s of road3D.segs) {
+    const abx = (s.bLng - s.aLng) * mLng, aby = (s.bLat - s.aLat) * METERS_PER_DEG_LAT;
+    const apx = (lng - s.aLng) * mLng, apy = (lat - s.aLat) * METERS_PER_DEG_LAT;
+    const len2 = abx * abx + aby * aby;
+    let t = len2 > 0 ? (apx * abx + apy * aby) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const dx = apx - abx * t, dy = apy - aby * t;
+    if (dx * dx + dy * dy < s.halfW * s.halfW) {
+      const h = s.aH + (s.bH - s.aH) * t;
+      if (best === null || h > best) best = h;
+    }
+  }
+  return best;
+}
+
+// Rebuild the 3D roads around the car from the loaded vector tiles.
+function refreshRoad3D(nowMs) {
+  if (!ROADS3D.ENABLED || !three.scene || !buildingSourceId) return;
+  const moved = road3D.lng === null ? Infinity
+    : metersBetween(car.lng, car.lat, road3D.lng, road3D.lat);
+  if (nowMs - road3D.lastRefresh < ROADS3D.REFRESH_MS && moved < 400) return;
+  road3D.lastRefresh = nowMs;
+  road3D.lng = car.lng; road3D.lat = car.lat;
+
+  const feats = map.querySourceFeatures(buildingSourceId, { sourceLayer: 'transportation' });
+
+  // ---- Pass 1: collect candidate ways + build the junction node map.
+  // Node rule (per ROADS.md): a node's lift is the max lift of the
+  // elevated ways meeting there; an elevated way that ends alone at a
+  // node with ground roads tapers to 0 there; an elevated dead end
+  // (usually a tile clip) keeps full height so bridges don't dip at
+  // tile seams. Ramps count as neither — they ADOPT their nodes' lifts.
+  const ways = [];
+  const nodeMap = new Map();
+  const nKey = (p) => Math.round(p[0] * 1e5) + '_' + Math.round(p[1] * 1e5);
+  const touch = (p, kind, lift) => {
+    let n = nodeMap.get(nKey(p));
+    if (!n) { n = { lift: 0, elev: 0, ground: 0 }; nodeMap.set(nKey(p), n); }
+    if (kind === 'bridge') { n.elev++; n.lift = Math.max(n.lift, lift); }
+    else if (kind === 'ground') n.ground++;
+  };
+
+  for (const f of feats) {
+    const p = f.properties;
+    if (!R3_DRIVABLE.has(p.class)) continue;
+    const lines = f.geometry.type === 'LineString' ? [f.geometry.coordinates]
+      : f.geometry.type === 'MultiLineString' ? f.geometry.coordinates : [];
+    const isBridge = p.brunnel === 'bridge';
+    const isTunnel = p.brunnel === 'tunnel';
+    const isRamp = !isBridge && !isTunnel && p.ramp === 1;
+    for (const pts of lines) {
+      if (pts.length < 2) continue;
+      let inRange = false;
+      for (const q of pts) {
+        if (metersBetween(q[0], q[1], car.lng, car.lat) < ROADS3D.RADIUS_M) { inRange = true; break; }
+      }
+      if (!inRange) continue;
+      if (isBridge || isTunnel || isRamp) {
+        // The six hand-built bridges already have solid decks — skip
+        // their ways so we don't build a second deck through them.
+        const mid = pts[Math.floor(pts.length / 2)];
+        if (bridgeDeckHeightAt(mid[0], mid[1]) !== null) continue;
+        let layer = p.layer;
+        if (layer === undefined || layer === null) {
+          layer = isTunnel ? -1 : 1;
+          logRoadFallback(`missing layer on ${p.class} ${p.brunnel || 'ramp'} → default ${layer}`);
+        }
+        // Tunnels render as a surface-level corridor (true underground is
+        // impossible with unclippable raster-DEM terrain — QUESTIONS.md).
+        const lift = isTunnel ? 0 : ROADS3D.LIFT_PER_LAYER * Math.max(1, layer);
+        const kind = isBridge ? 'bridge' : isTunnel ? 'tunnel' : 'ramp';
+        ways.push({ pts, cls: p.class, lift, kind, ramp: isRamp });
+        touch(pts[0], kind, lift);
+        touch(pts[pts.length - 1], kind, lift);
+      } else {
+        touch(pts[0], 'ground', 0);
+        touch(pts[pts.length - 1], 'ground', 0);
+      }
+    }
+  }
+
+  const nodeLift = (p) => {
+    const n = nodeMap.get(nKey(p));
+    if (!n) return 0;
+    if (n.elev >= 2) return n.lift;                 // viaduct continues
+    if (n.elev === 1 && n.ground === 0) return n.lift; // dead end / tile clip
+    return 0;                                        // lands on ground here
+  };
+
+  // ---- Pass 2: build geometry + physics segments.
+  if (road3D.group) {
+    for (const child of road3D.group.children) {
+      if (child.geometry) child.geometry.dispose();
+    }
+    three.scene.remove(road3D.group);
+  }
+  const group = new THREE.Group();
+  const segs = [];
+  const deckMat = road3D.deckMat || (road3D.deckMat =
+    new THREE.MeshLambertMaterial({ color: 0x454b54, side: THREE.DoubleSide }));
+  const tunnelMat = road3D.tunnelMat || (road3D.tunnelMat =
+    new THREE.MeshLambertMaterial({ color: 0x2c2e33, side: THREE.DoubleSide }));
+  const positions = []; const tunnelPositions = [];
+  const pillarSpots = []; // {x, z, top}
+
+  for (const w of ways) {
+    const width = ROADS3D.WIDTHS[w.ramp ? 'ramp' : w.cls] ?? ROADS3D.WIDTHS.default;
+    const halfW = width / 2;
+
+    // Resample: subdivide long legs so the lift profile bends smoothly.
+    const samples = [];
+    for (let i = 0; i < w.pts.length - 1; i++) {
+      const a = w.pts[i], b = w.pts[i + 1];
+      const d = metersBetween(a[0], a[1], b[0], b[1]);
+      const n = Math.max(1, Math.ceil(d / 25));
+      for (let k = 0; k < n; k++) {
+        samples.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+      }
+    }
+    samples.push(w.pts[w.pts.length - 1]);
+    // Arc length per sample.
+    const arc = [0];
+    for (let i = 1; i < samples.length; i++) {
+      arc.push(arc[i - 1] + metersBetween(samples[i - 1][0], samples[i - 1][1],
+                                          samples[i][0], samples[i][1]));
+    }
+    const total = arc[arc.length - 1];
+    if (total < 4) continue;
+
+    // Height profile: base terrain interpolates end-to-end (straight
+    // decks over dips/water); lift from the node graph.
+    const tA = Math.max(0, groundAt(samples[0][0], samples[0][1], 0));
+    const tB = Math.max(0, groundAt(samples[samples.length - 1][0], samples[samples.length - 1][1], 0));
+    const l0 = nodeLift(w.pts[0]);
+    const lN = nodeLift(w.pts[w.pts.length - 1]);
+    const taper = Math.min(total / 3, ROADS3D.TAPER_M);
+    const liftAt = (s) => {
+      if (w.kind === 'tunnel') return 0;
+      if (w.ramp) return l0 + (lN - l0) * (s / total); // true end-to-end slope
+      if (s < taper) return l0 + (w.lift - l0) * (s / taper);
+      if (s > total - taper) return lN + (w.lift - lN) * ((total - s) / taper);
+      return w.lift;
+    };
+    if (w.ramp && total > 0 && Math.abs(lN - l0) / total > ROADS3D.MAX_GRADE) {
+      logRoadFallback(`ramp grade ${(100 * Math.abs(lN - l0) / total).toFixed(0)}% exceeds cap (way too short for its climb) — kept as-is`);
+    }
+
+    // Emit a solid box-strip: 4 corners per sample, 4 quads per leg.
+    const out = w.kind === 'tunnel' ? tunnelPositions : positions;
+    let prev = null;
+    for (let i = 0; i < samples.length; i++) {
+      const h = (tA + (tB - tA) * (arc[i] / total)) + liftAt(arc[i]);
+      const pos = toScene(samples[i][0], samples[i][1], h + 0.35);
+      // Direction for the cross vector (next-prev).
+      const j0 = Math.max(0, i - 1), j1 = Math.min(samples.length - 1, i + 1);
+      const pA = toScene(samples[j0][0], samples[j0][1], 0);
+      const pB = toScene(samples[j1][0], samples[j1][1], 0);
+      let ax = -(pB.z - pA.z), az = (pB.x - pA.x);
+      const al = Math.hypot(ax, az) || 1; ax = ax / al * halfW; az = az / al * halfW;
+      const cur = {
+        tl: [pos.x - ax, pos.y, pos.z - az], tr: [pos.x + ax, pos.y, pos.z + az],
+        bl: [pos.x - ax, pos.y - 0.9, pos.z - az], br: [pos.x + ax, pos.y - 0.9, pos.z + az],
+      };
+      if (prev) {
+        const quad = (a, b, c, d) => { out.push(...a, ...b, ...c, ...a, ...c, ...d); };
+        quad(prev.tl, prev.tr, cur.tr, cur.tl);   // top
+        quad(prev.bl, cur.bl, cur.br, prev.br);   // bottom
+        quad(prev.tl, cur.tl, cur.bl, prev.bl);   // left side
+        quad(prev.tr, prev.br, cur.br, cur.tr);   // right side
+        segs.push({
+          aLng: samples[i - 1][0], aLat: samples[i - 1][1], aH: prevH,
+          bLng: samples[i][0], bLat: samples[i][1], bH: h, halfW,
+        });
+        // Pillars under high spans.
+        if (w.kind === 'bridge') {
+          const since = arc[i] % ROADS3D.PILLAR_EVERY_M;
+          if (arc[i] - (prevArc ?? 0) >= 0 && Math.floor(arc[i] / ROADS3D.PILLAR_EVERY_M) >
+              Math.floor((prevArc ?? 0) / ROADS3D.PILLAR_EVERY_M)) {
+            const g = Math.max(0, groundAt(samples[i][0], samples[i][1], 0));
+            if (h - g > 4) pillarSpots.push({ x: pos.x, z: pos.z, top: pos.y - 0.9, ground: g });
+          }
+        }
+      }
+      var prevH = h; var prevArc = arc[i];
+      prev = cur;
+    }
+  }
+
+  // One mesh per material — cheap no matter how many ways.
+  if (positions.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.computeVertexNormals();
+    group.add(new THREE.Mesh(geo, deckMat));
+  }
+  if (tunnelPositions.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(tunnelPositions, 3));
+    geo.computeVertexNormals();
+    group.add(new THREE.Mesh(geo, tunnelMat));
+  }
+  if (pillarSpots.length) {
+    const pillarMat = road3D.pillarMat || (road3D.pillarMat =
+      new THREE.MeshLambertMaterial({ color: 0x8a8f98 }));
+    const inst = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.8, 1.0, 1, 8), pillarMat, pillarSpots.length);
+    const m = new THREE.Matrix4();
+    pillarSpots.forEach((s, i) => {
+      const hgt = Math.max(0.1, s.top - (s.ground - 1));
+      m.makeScale(1, hgt, 1);
+      m.setPosition(s.x, (s.top + s.ground - 1) / 2, s.z);
+      inst.setMatrixAt(i, m);
+    });
+    group.add(inst);
+  }
+
+  three.scene.add(group);
+  road3D.group = group;
+  road3D.segs = segs;
+}
+
 const FORK = { HALF: 120, GAP_MAX: 11 }; // metres: fork reach each side, widest gap
 // Where central-tower spans fork: used to nudge traffic onto a carriageway
 // (instead of the empty centre gap) as it passes the pylon.
@@ -2066,9 +2324,11 @@ function updateTraffic(dt, nowMs) {
       }
     }
 
-    // Ride up onto a bridge deck if this bit of road crosses one.
+    // Ride up onto a bridge deck / generated ramp if this road has one.
     const deckH = bridgeDeckHeightAt(dLng, dLat);
-    const y = deckH !== null ? deckH : Math.max(0, groundAt(dLng, dLat, 0));
+    const r3H = deckH === null ? road3DHeightAt(dLng, dLat) : null;
+    const y = deckH !== null ? deckH
+      : r3H !== null ? r3H : Math.max(0, groundAt(dLng, dLat, 0));
     const p = toScene(dLng, dLat, y + 1);
     c.mesh.position.copy(p);
     const dx = (b[0] - a[0]) * Math.cos(lat * DEG);
@@ -2317,6 +2577,9 @@ function updatePhysics(dt) {
   // falling through to the water). Below the deck you can still fly under.
   const deckH = bridgeDeckHeightAt(car.lng, car.lat);
   if (deckH !== null && car.alt >= deckH - 3) floorAlt = Math.max(floorAlt, deckH);
+  // Generated 3D roads (ramps/overpasses) are solid the same way.
+  const r3H = road3DHeightAt(car.lng, car.lat);
+  if (r3H !== null && car.alt >= r3H - 3) floorAlt = Math.max(floorAlt, r3H);
   const onGround = car.alt < floorAlt + 1;
   const grip = onGround ? phys.GRIP_GROUND : phys.GRIP_AIR;
   sideSpeed *= Math.exp(-grip * dt);
@@ -2457,6 +2720,11 @@ function refreshBuildingCache(nowMs) {
     // Skip the Bay Bridge tower boxes we hide from the map — otherwise the
     // car would still crash into an invisible 160 m block on the roadway.
     if (OSM_HIDE_IDS && OSM_HIDE_IDS.includes(f.id)) continue;
+    // Bridge towers we recolour (Golden Gate) keep their OSM footprint,
+    // which spans the whole deck — but the real road passes BETWEEN the
+    // tower legs. Make them non-solid so the deck is actually drivable
+    // (matches the Bay Bridge towers, which are also pass-through).
+    if (recolorTowerIds.has(f.id)) continue;
     const height = f.properties.render_height ?? 5;
     // A Polygon is a list of rings (outline + holes); a MultiPolygon is
     // a list of polygons. Flatten both cases into "list of ring-lists".
@@ -2739,6 +3007,7 @@ function tick(now) {
   checkCollisions(now);
   checkDelivery();
   if (!SHOT) updateTraffic(dt, now); // traffic is random — skip it in shot mode
+  refreshRoad3D(now);
   rebuildShadows(now);
   updateChaseCamera(dt);
   updateHUD();
