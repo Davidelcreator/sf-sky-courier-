@@ -117,20 +117,34 @@ function rotateHue(hex, deg) {
   return '#' + to(R) + to(G) + to(B);
 }
 
+// Multiply a hex color's brightness by `f` (clamped) — cheap way to make
+// darker/lighter variants of a palette without touching its hue.
+function shadeHex(hex, f) {
+  const ch = (i) => Math.max(0, Math.min(255,
+    Math.round(parseInt(hex.slice(i, i + 2), 16) * f)));
+  return '#' + [1, 3, 5].map((i) => ch(i).toString(16).padStart(2, '0')).join('');
+}
+
 // Build the MapLibre color expression for buildings. Each building is
-// sorted into one of 4 "buckets" (from its id + height), and each bucket
-// uses a hue-shifted copy of the BUILDING_COLORS ramp — so the city is
-// colored by height AND neighbouring buildings pick different tints.
+// sorted into one of 8 "buckets" (from its id + height); buckets vary in
+// BOTH warmth (hue rotation) and value (lighter/darker) — so a block
+// reads as many different materials the way a real street does, while
+// every variant stays inside the desaturated reference family.
 function buildingColorExpression() {
   const heightInput = ['coalesce', ['get', 'render_height'], 0];
   const ramp = (pal) => ['interpolate', ['linear'], heightInput, ...pal.flat()];
-  const shift = (deg) => BUILDING_COLORS.map(([h, hex]) => [h, rotateHue(hex, deg)]);
-  const bucket = ['%', ['+', ['to-number', ['coalesce', ['id'], 0]], ['round', heightInput]], 4];
+  const variant = (deg, f) =>
+    BUILDING_COLORS.map(([h, hex]) => [h, shadeHex(rotateHue(hex, deg), f)]);
+  const bucket = ['%', ['+', ['to-number', ['coalesce', ['id'], 0]], ['round', heightInput]], 8];
   return ['match', bucket,
     0, ramp(BUILDING_COLORS),
-    1, ramp(shift(12)),
-    2, ramp(shift(-12)),
-    ramp(shift(26))];
+    1, ramp(variant(10, 1.0)),    // warmer
+    2, ramp(variant(-10, 1.0)),   // cooler
+    3, ramp(variant(0, 0.86)),    // darker (older concrete / brick shadow)
+    4, ramp(variant(14, 1.10)),   // light warm (painted stucco)
+    5, ramp(variant(-16, 0.93)),  // dark cool (glass/steel)
+    6, ramp(variant(22, 0.95)),   // tan-brick family
+    ramp(variant(0, 1.12))];      // near-white (fresh paint / limestone)
 }
 
 const map = new maplibregl.Map({
