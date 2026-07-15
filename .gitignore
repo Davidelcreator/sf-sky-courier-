@@ -1,3 +1,12 @@
 # Files git should NOT track.
 # .claude/ holds local tooling config specific to this machine.
 .claude/
+
+# dev-tooling dependencies (restore with: npm install)
+node_modules/
+
+# reference frames from the Genie 3 video (copyrighted footage — local only)
+ref/
+
+# capture-script output (regenerate with: npm run shot)
+shots/

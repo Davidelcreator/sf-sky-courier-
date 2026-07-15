@@ -33,6 +33,12 @@ const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEH
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
 const maplibregl = window.maplibregl;
 
+// --- Shot mode (?shot=1) -------------------------------------------------
+// A deterministic-screenshot harness for tools/capture.js: same car spot,
+// same camera, frozen water/beacon animation, no traffic, no HUD. It ONLY
+// activates when the URL contains ?shot — normal play is untouched.
+const SHOT = new URLSearchParams(window.location.search).has('shot');
+
 // Meters in one degree of latitude, everywhere on Earth. (Longitude
 // degrees shrink as you go toward the poles — we correct for that
 // with cos(latitude) wherever it matters.)
@@ -1819,6 +1825,9 @@ const gameLayer = {
 // Move/animate the 3D objects to match the current game state.
 // Runs inside every render, so keep it cheap.
 function updateSceneObjects(timeSeconds) {
+  // Shot mode: freeze every time-driven animation (water ripples, beacon
+  // pulse, thruster flicker) at one instant so captures are repeatable.
+  if (SHOT) timeSeconds = 100;
   // --- Car position & heading ---
   three.carGroup.position.copy(toScene(car.lng, car.lat, car.alt));
   // Heading is clockwise-from-north; three.js rotates counterclockwise,
@@ -2360,7 +2369,7 @@ function tick(now) {
   updatePhysics(dt);
   checkCollisions(now);
   checkDelivery();
-  updateTraffic(dt, now);
+  if (!SHOT) updateTraffic(dt, now); // traffic is random — skip it in shot mode
   rebuildShadows(now);
   updateChaseCamera(dt);
   updateHUD();
@@ -2382,3 +2391,41 @@ document.getElementById('start-button').addEventListener('click', startGame);
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Enter') startGame();
 });
+
+// --- Shot-mode boot: fixed spot, fixed camera, no HUD ---
+// Defaults put the car on The Embarcadero facing the city + Bay Bridge —
+// one frame that shows sky, buildings, road, water and haze distance.
+// Override any of them in the URL: ?shot&lng=..&lat=..&alt=..&heading=..
+if (SHOT) {
+  const q = new URLSearchParams(window.location.search);
+  car.lng = parseFloat(q.get('lng') ?? '-122.39735');  // The Embarcadero at Broadway
+  car.lat = parseFloat(q.get('lat') ?? '37.79930');
+  car.alt = parseFloat(q.get('alt') ?? '3');
+  car.heading = parseFloat(q.get('heading') ?? '2.7'); // looking SE toward the Ferry Building
+  car.vx = 0; car.vy = 0; car.vAlt = 0;
+  state.camHeading = car.heading;
+  state.cameraMode = parseInt(q.get('cam') ?? '1', 10);
+  // The chase camera eases zoom/pitch toward the mode preset every frame,
+  // so one-time values would be erased. Instead we set the two offsets it
+  // respects: zoomNudge (added to the preset) and look.pitch (kept as-is
+  // while the car is parked). Both give a stable, repeatable framing.
+  const mode = CAMERA.MODES[state.cameraMode];
+  state.camZoom = parseFloat(q.get('zoom') ?? '19.5');
+  state.camPitch = parseFloat(q.get('pitch') ?? '72');
+  state.zoomNudge = state.camZoom - mode.zoom;
+  look.pitch = state.camPitch - mode.pitch;
+  look.yaw = 0;
+  state.invulnUntil = Infinity;          // never lose hearts mid-capture
+  document.getElementById('hud').style.display = 'none';
+  overlay.style.display = 'none';
+  state.running = true;
+
+  // Tell the capture script when the map has actually finished loading
+  // tiles (map.loaded() goes true when the map is idle and complete).
+  const readyPoll = setInterval(() => {
+    if (didInitGame && map.loaded()) {
+      window.__shotReady = true;
+      clearInterval(readyPoll);
+    }
+  }, 250);
+}

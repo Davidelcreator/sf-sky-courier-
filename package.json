@@ -1,0 +1,13 @@
+{
+  "name": "sf-sky-courier",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Dev tooling for SF Sky Courier (the game itself has no build step)",
+  "type": "commonjs",
+  "scripts": {
+    "shot": "node tools/capture.js"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.0.0"
+  }
+}
