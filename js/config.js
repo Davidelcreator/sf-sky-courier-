@@ -37,9 +37,9 @@ export const BEACONS = [
 // Physics constants. Units are meters and seconds (m/s, m/s²).
 // These are "arcade" values — a real car can't do any of this.
 export const PHYSICS = {
-  ACCEL: 100,         // forward acceleration when holding W (m/s²)
+  ACCEL: 75,          // forward acceleration when holding W (m/s²)
   BRAKE: 130,         // braking/reverse acceleration when holding S
-  MAX_SPEED: 268,     // top forward speed (268 m/s ≈ 600 mph!!)
+  MAX_SPEED: 134,     // top forward speed (134 m/s ≈ 300 mph — was 600)
   MAX_REVERSE: 12,    // top reverse speed
   TURN_RATE: 2.0,     // how fast the car turns (radians per second)
   // Steering eases off at high speed so you don't swerve into buildings
@@ -51,7 +51,7 @@ export const PHYSICS = {
   DRAG: 0.35,         // air resistance along the direction you're facing.
                       // Bigger = the car coasts to a stop sooner.
                       // Physics note: drag grows with speed, so your real
-                      // top speed is ACCEL ÷ DRAG (here 100/0.35 ≈ 285) —
+                      // top speed is ACCEL ÷ DRAG (here 75/0.35 ≈ 214) —
                       // keep that above MAX_SPEED or the cap is unreachable.
   GRIP_GROUND: 3.5,   // how strongly sideways sliding is cancelled on the
                       // ground. Bigger = grippier, smaller = drifty.
@@ -78,11 +78,13 @@ export const VEHICLES = [
   {
     name: 'SKY CAR',
     model: 'car',
+    modelLength: 4.4,   // metres nose-to-tail — a real car (×CAR_SCALE above)
     physics: {}, // the PHYSICS defaults above ARE the car
   },
   {
     name: 'SCOOTER',
     model: 'scooter',
+    modelLength: 2.2,   // metres — a real Vespa (×CAR_SCALE above)
     physics: {
       MAX_SPEED: 34,      // ~76 mph — a zippy delivery scooter
       ACCEL: 42,
@@ -132,7 +134,8 @@ export const CAMERA = {
 export const GAME = {
   DELIVERY_RADIUS: 45, // how close (meters) you must get to score
   POINTS: 100,         // points per delivery
-  CAR_SCALE: 1.8,      // 1 = realistic car size; bigger is easier to see
+  CAR_SCALE: 1.0,      // 1 = realistic car size; bigger is easier to see
+                       // (was 1.8 — the player car towered over traffic)
   MAX_HEALTH: 3,       // hearts you start with
   INVULN_MS: 1400,     // after a crash, you can't be hurt again for this long
                        // (so one bonk doesn't drain every heart at once)

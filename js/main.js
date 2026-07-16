@@ -1194,13 +1194,15 @@ function loadVehicleModel(url, targetGroup, opts) {
 }
 
 function loadVehicleModels() {
+  // Sizes come from VEHICLES[].modelLength in config.js so they're tunable.
   // Car: replace the box car; the glowing thruster pods go away with it.
   loadVehicleModel('assets/car.glb', three.carModel, {
-    length: 4.4, rotY: 180, onLoaded: () => { three.thrusters = []; },
+    length: VEHICLES[0].modelLength ?? 4.4, rotY: 180,
+    onLoaded: () => { three.thrusters = []; },
   });
   // Scooter: a Vespa, replacing the hand-built kick-scooter.
   loadVehicleModel('assets/scooter.glb', three.scooterModel, {
-    length: 2.2, rotY: 180,
+    length: VEHICLES[1].modelLength ?? 2.2, rotY: 180,
   });
 }
 
