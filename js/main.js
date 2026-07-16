@@ -1369,6 +1369,7 @@ function refreshRoad3D(nowMs) {
   // tile seams. Ramps count as neither — they ADOPT their nodes' lifts.
   const ways = [];
   const nodeMap = new Map();
+  const tunnelEnds = new Map(); // node key -> count of tunnel ways ending there
   const nKey = (p) => Math.round(p[0] * 1e5) + '_' + Math.round(p[1] * 1e5);
   const touch = (p, kind, lift) => {
     let n = nodeMap.get(nKey(p));
@@ -1409,6 +1410,11 @@ function refreshRoad3D(nowMs) {
         ways.push({ pts, cls: p.class, lift, kind, ramp: isRamp });
         touch(pts[0], kind, lift);
         touch(pts[pts.length - 1], kind, lift);
+        if (isTunnel) {
+          for (const e of [pts[0], pts[pts.length - 1]]) {
+            tunnelEnds.set(nKey(e), (tunnelEnds.get(nKey(e)) || 0) + 1);
+          }
+        }
       } else {
         touch(pts[0], 'ground', 0);
         touch(pts[pts.length - 1], 'ground', 0);
@@ -1426,9 +1432,9 @@ function refreshRoad3D(nowMs) {
 
   // ---- Pass 2: build geometry + physics segments.
   if (road3D.group) {
-    for (const child of road3D.group.children) {
+    road3D.group.traverse((child) => {
       if (child.geometry) child.geometry.dispose();
-    }
+    });
     three.scene.remove(road3D.group);
   }
   const group = new THREE.Group();
@@ -1536,6 +1542,37 @@ function refreshRoad3D(nowMs) {
     geo.computeVertexNormals();
     group.add(new THREE.Mesh(geo, tunnelMat));
   }
+  // Tunnel portals: a dark frame wherever a tunnel way ends at ground
+  // (not where two tunnel ways continue into each other), so entrances
+  // read as entrances even though the corridor runs at surface level.
+  const portalMat = road3D.portalMat || (road3D.portalMat =
+    new THREE.MeshLambertMaterial({ color: 0x3a3d42 }));
+  for (const w of ways) {
+    if (w.kind !== 'tunnel') continue;
+    const width = ROADS3D.WIDTHS[w.cls] ?? ROADS3D.WIDTHS.default;
+    for (const endIdx of [0, w.pts.length - 1]) {
+      const e = w.pts[endIdx];
+      if ((tunnelEnds.get(nKey(e)) || 0) !== 1) continue; // continues underground
+      const nb = w.pts[endIdx === 0 ? 1 : w.pts.length - 2];
+      const g = Math.max(0, groundAt(e[0], e[1], 0));
+      const pos = toScene(e[0], e[1], g);
+      const to = toScene(nb[0], nb[1], g);
+      const portal = new THREE.Group();
+      const half = width / 2 + 0.6;
+      for (const side of [-1, 1]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(1.1, 5.2, 1.1), portalMat);
+        post.position.set(side * half, 2.6, 0);
+        portal.add(post);
+      }
+      const lintel = new THREE.Mesh(new THREE.BoxGeometry(half * 2 + 1.1, 1.4, 1.3), portalMat);
+      lintel.position.y = 5.4;
+      portal.add(lintel);
+      portal.position.copy(pos);
+      portal.rotation.y = Math.atan2(to.x - pos.x, to.z - pos.z);
+      group.add(portal);
+    }
+  }
+
   if (pillarSpots.length) {
     const pillarMat = road3D.pillarMat || (road3D.pillarMat =
       new THREE.MeshLambertMaterial({ color: 0x8a8f98 }));
