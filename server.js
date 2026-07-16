@@ -14,7 +14,7 @@ const http = require('http');   // Node's built-in web server toolkit
 const fs = require('fs');       // read files from disk
 const path = require('path');   // join file paths safely
 
-const PORT = 8080;
+const PORT = process.env.PORT || 8080; // set PORT to run beside another instance
 
 // The browser needs to be told what KIND of file it's getting —
 // these labels are called MIME types.
