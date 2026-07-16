@@ -233,13 +233,27 @@ function initGame() {
   // their own layer and this one overlays only the dark window punches
   // (everything else in the tile is transparent, letting the tint show).
   // The pattern is generated in code — no image files.
-  const win = document.createElement('canvas');
-  win.width = 12; win.height = 12;
-  const wctx = win.getContext('2d');
-  wctx.clearRect(0, 0, 12, 12);                  // transparent wall
-  wctx.fillStyle = 'rgba(25, 30, 40, 1)';        // dark glass punch
-  wctx.fillRect(2, 2, 6, 7);                     // one window per cell
-  map.addImage('window-grid', wctx.getImageData(0, 0, 12, 12), { pixelRatio: 1 });
+  // Three window patterns so facades VARY building to building (the
+  // reference shows different window sizes/floor heights next door):
+  // a = dense office grid, b = wide two-pane residential, c = tall narrow.
+  const mkPattern = (name, w, h, draw) => {
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d');
+    cx.clearRect(0, 0, w, h);
+    cx.fillStyle = 'rgba(25, 30, 40, 1)';        // dark glass punch
+    draw(cx);
+    map.addImage(name, cx.getImageData(0, 0, w, h), { pixelRatio: 1 });
+  };
+  mkPattern('window-grid', 12, 12, (cx) => cx.fillRect(2, 2, 6, 7));
+  mkPattern('window-wide', 15, 13, (cx) => { cx.fillRect(2, 3, 4, 7); cx.fillRect(8, 3, 4, 7); });
+  mkPattern('window-tall', 10, 15, (cx) => cx.fillRect(3, 2, 4, 10));
+  // Same id+height hash as the tint buckets, folded to 3 → a building's
+  // window style is stable and varies independently of its color.
+  const patternExpr = ['match',
+    ['%', ['+', ['to-number', ['coalesce', ['id'], 0]],
+           ['round', ['coalesce', ['get', 'render_height'], 0]]], 3],
+    0, 'window-grid', 1, 'window-wide', 'window-tall'];
   map.addLayer(
     {
       id: '3d-buildings-windows',
@@ -248,7 +262,7 @@ function initGame() {
       type: 'fill-extrusion',
       minzoom: 15,                               // skip far tiles — detail fades anyway
       paint: {
-        'fill-extrusion-pattern': 'window-grid',
+        'fill-extrusion-pattern': patternExpr,
         // 0.5 m SHORTER than the tint layer: its patterned roof face then
         // hides below the tint layer's clean roof (depth test), so the
         // windows appear on WALLS only — roofs stay plain.
