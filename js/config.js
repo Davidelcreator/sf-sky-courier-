@@ -357,10 +357,17 @@ export const BRIDGES = [
     recolorTowers: true,
     towers: [[-122.4778921, 37.8140144], [-122.4792343, 37.8255026]],
     cableAnchors: [[-122.4775337, 37.8109470], [-122.4795927, 37.8285700]],
+    // Deck centreline traced from the REAL carriageway ways in the tiles
+    // (the old 2-point line kinked ~50 m off the true alignment, which
+    // both looked wrong at the south approach AND let ROADS3D build the
+    // real ways as a phantom second deck alongside ours).
     deck: [
       [-122.4756990, 37.8075800, 56],   // ground, SF side: ON the US-101 plaza roadway (terrain measured 56 m)
-      [-122.4775337, 37.8109470],
-      [-122.4795927, 37.8285700],
+      [-122.4765170, 37.8080970],       // bridge start (real alignment)
+      [-122.4769430, 37.8086630],       // approach curve…
+      [-122.4772700, 37.8092080],
+      [-122.4773660, 37.8095720],       // …straightens onto the span
+      [-122.4795927, 37.8285700],       // main span (through both towers)
       [-122.4799591, 37.8317062, 70],   // ground, Marin headlands
     ],
   },

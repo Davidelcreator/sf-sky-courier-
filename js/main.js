@@ -1309,6 +1309,23 @@ function closestOnPolylineXZ(pts, target) {
 // (where the pylon stands) and then closes again — the real Bay Bridge
 // east span. We walk the centreline in short steps and, at each step,
 // work out how wide that central gap should be.
+// True when a point lies within `tol` metres of any hand-built bridge
+// deck centreline — a wider net than bridgeDeckHeightAt's drivable
+// corridor, used to keep ROADS3D from double-building those spans.
+function nearHandBridge(lng, lat, tol) {
+  const mLng = METERS_PER_DEG_LAT * Math.cos(lat * DEG);
+  for (const s of bridgeSegments) {
+    const abx = (s.b.lng - s.a.lng) * mLng, aby = (s.b.lat - s.a.lat) * METERS_PER_DEG_LAT;
+    const apx = (lng - s.a.lng) * mLng, apy = (lat - s.a.lat) * METERS_PER_DEG_LAT;
+    const len2 = abx * abx + aby * aby;
+    let t = len2 > 0 ? (apx * abx + apy * aby) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const dx = apx - abx * t, dy = apy - aby * t;
+    if (dx * dx + dy * dy < tol * tol) return true;
+  }
+  return false;
+}
+
 // ============================================================
 // 3D ROAD NETWORK (ROADS3D) — data-driven ramps / overpasses / tunnels
 // ============================================================
@@ -1370,7 +1387,10 @@ function refreshRoad3D(nowMs) {
   const ways = [];
   const nodeMap = new Map();
   const tunnelEnds = new Map(); // node key -> count of tunnel ways ending there
-  const nKey = (p) => Math.round(p[0] * 1e5) + '_' + Math.round(p[1] * 1e5);
+  // ~5.5 m grid cells: coarse enough to unify a junction whose shared
+  // node got quantized differently in neighbouring tiles, fine enough to
+  // keep parallel carriageways (>6 m apart) as separate nodes.
+  const nKey = (p) => Math.round(p[0] * 2e4) + '_' + Math.round(p[1] * 2e4);
   const touch = (p, kind, lift) => {
     let n = nodeMap.get(nKey(p));
     if (!n) { n = { lift: 0, elev: 0, ground: 0 }; nodeMap.set(nKey(p), n); }
@@ -1396,8 +1416,16 @@ function refreshRoad3D(nowMs) {
       if (isBridge || isTunnel || isRamp) {
         // The six hand-built bridges already have solid decks — skip
         // their ways so we don't build a second deck through them.
-        const mid = pts[Math.floor(pts.length / 2)];
-        if (bridgeDeckHeightAt(mid[0], mid[1]) !== null) continue;
+        // OSM maps each direction as its own way, so test SEVERAL points
+        // against a corridor WIDER than the physics one (the outer
+        // carriageway can sit ~15-20 m off our deck centreline; testing
+        // just the midpoint let it slip through as a phantom lane).
+        let nearDeck = 0, tested = 0;
+        for (let k = 0; k < pts.length; k += Math.max(1, Math.floor(pts.length / 5))) {
+          tested++;
+          if (nearHandBridge(pts[k][0], pts[k][1], 30)) nearDeck++;
+        }
+        if (nearDeck / tested >= 0.5) continue;
         let layer = p.layer;
         if (layer === undefined || layer === null) {
           layer = isTunnel ? -1 : 1;
@@ -1426,7 +1454,14 @@ function refreshRoad3D(nowMs) {
     const n = nodeMap.get(nKey(p));
     if (!n) return 0;
     if (n.elev >= 2) return n.lift;                 // viaduct continues
-    if (n.elev === 1 && n.ground === 0) return n.lift; // dead end / tile clip
+    if (n.elev === 1 && n.ground === 0) {
+      // Lone elevated end. Keep full height ONLY near the edge of the
+      // loaded area (a genuine tile/radius clip whose continuation isn't
+      // loaded); anywhere else a floating cut end is a data mismatch —
+      // taper it to the ground instead of leaving a slab in mid-air.
+      const dist = metersBetween(p[0], p[1], car.lng, car.lat);
+      return dist > ROADS3D.RADIUS_M * 0.8 ? n.lift : 0;
+    }
     return 0;                                        // lands on ground here
   };
 
@@ -1500,9 +1535,12 @@ function refreshRoad3D(nowMs) {
       const pB = toScene(samples[j1][0], samples[j1][1], 0);
       let ax = -(pB.z - pA.z), az = (pB.x - pA.x);
       const al = Math.hypot(ax, az) || 1; ax = ax / al * halfW; az = az / al * halfW;
+      const lifted = liftAt(arc[i]) > 1.5; // above ground = deserves a rail
       const cur = {
         tl: [pos.x - ax, pos.y, pos.z - az], tr: [pos.x + ax, pos.y, pos.z + az],
         bl: [pos.x - ax, pos.y - 0.9, pos.z - az], br: [pos.x + ax, pos.y - 0.9, pos.z + az],
+        rl: [pos.x - ax, pos.y + 1.0, pos.z - az], rr: [pos.x + ax, pos.y + 1.0, pos.z + az],
+        lifted,
       };
       if (prev) {
         const quad = (a, b, c, d) => { out.push(...a, ...b, ...c, ...a, ...c, ...d); };
@@ -1510,6 +1548,11 @@ function refreshRoad3D(nowMs) {
         quad(prev.bl, cur.bl, cur.br, prev.br);   // bottom
         quad(prev.tl, cur.tl, cur.bl, prev.bl);   // left side
         quad(prev.tr, prev.br, cur.br, cur.tr);   // right side
+        // Guard rails: thin walls along both edges of elevated stretches.
+        if (prev.lifted && cur.lifted) {
+          quad(prev.tl, cur.tl, cur.rl, prev.rl); // left rail
+          quad(prev.tr, prev.rr, cur.rr, cur.tr); // right rail
+        }
         segs.push({
           aLng: samples[i - 1][0], aLat: samples[i - 1][1], aH: prevH,
           bLng: samples[i][0], bLat: samples[i][1], bH: h, halfW,
@@ -1697,6 +1740,7 @@ function buildBridges() {
   const deckMat = new THREE.MeshLambertMaterial({ color: 0x454b54 });
   const pierMat = new THREE.MeshLambertMaterial({ color: 0x8a8f98 });
   const medianMat = new THREE.MeshLambertMaterial({ color: 0xd9c25a }); // yellow divider
+  const railMat = new THREE.MeshLambertMaterial({ color: 0x9aa0a6 });   // guard rails
   const poleMat = new THREE.MeshLambertMaterial({ color: 0x2b2f36 });
   const lampMat = new THREE.MeshBasicMaterial({ color: 0xfff0c0 });     // glowing lamp head
   const polePositions = []; // lamp-post bases, collected across every bridge
@@ -1733,9 +1777,19 @@ function buildBridges() {
       median.rotation.copy(slab.rotation);
       group.add(median);
 
-      // Lamp-post bases along both edges at intervals.
+      // Guard rails: a low wall along each edge of the deck.
       const along = c.clone().sub(a).normalize();
       const across = new THREE.Vector3(-along.z, 0, along.x);
+      for (const side of [-1, 1]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.1, len), railMat);
+        rail.position.copy(slab.position)
+          .add(across.clone().multiplyScalar(10.65 * side));
+        rail.position.y += 1.5 + 0.55; // slab top (+1.5) plus half rail height
+        rail.rotation.copy(slab.rotation);
+        group.add(rail);
+      }
+
+      // Lamp-post bases along both edges at intervals.
       const nPoles = Math.floor(len / 85);
       for (let k = 1; k <= nPoles; k++) {
         const base = a.clone().lerp(c, k / (nPoles + 1));
