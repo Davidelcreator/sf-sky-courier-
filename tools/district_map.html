@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<!-- tools/district_map.html — visual of the NPC spawn districts.
+     Open via the dev server:  http://localhost:8080/tools/district_map.html
+     It reads DISTRICTS + TREE_SPOTS + NPC_ARCHETYPES straight from
+     js/config.js, so this picture always matches the game's reality. -->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SF Sky Courier — NPC spawn districts</title>
+  <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+  <style>
+    body { margin: 0; font: 13px/1.45 system-ui, sans-serif; }
+    #map { position: absolute; inset: 0; }
+    #legend {
+      position: absolute; top: 10px; left: 10px; z-index: 5;
+      background: rgba(255,255,255,.93); border-radius: 10px;
+      padding: 10px 14px; max-width: 340px; box-shadow: 0 2px 10px rgba(0,0,0,.25);
+    }
+    #legend h1 { font-size: 15px; margin: 0 0 6px; }
+    .sw { display: inline-block; width: 11px; height: 11px; border-radius: 6px;
+          margin-right: 6px; vertical-align: -1px; }
+    .row { margin: 2px 0; }
+    .who { color: #555; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="legend"><h1>NPC spawn districts</h1><div id="rows"></div>
+  <div class="row" style="margin-top:6px;color:#777">Everywhere else = “residential”
+  (mostly dog walkers). Weights per archetype live in js/config.js.</div></div>
+<script type="module">
+  const { DISTRICTS, TREE_SPOTS, NPC_ARCHETYPES } = await import('../js/config.js');
+
+  const COLORS = { downtown: '#e05555', marina: '#3f8fd2', waterfront: '#22a7a0',
+    coast: '#e2b93b', marin: '#8347c2', berkeley: '#58a55c',
+    paloalto: '#d2703f', parks: '#2e7d32' };
+
+  // A circle of real meters, as a lng/lat polygon.
+  function circle([lng, lat, r]) {
+    const pts = [];
+    for (let i = 0; i <= 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      pts.push([lng + (Math.cos(a) * r) / (111320 * Math.cos(lat * Math.PI / 180)),
+                lat + (Math.sin(a) * r) / 111320]);
+    }
+    return pts;
+  }
+
+  const features = [], labels = [];
+  for (const d of DISTRICTS) {
+    const zones = d.fromTreeSpots
+      ? TREE_SPOTS.map((t) => [t.center[0], t.center[1], t.radius])
+      : d.zones;
+    zones.forEach((z, i) => {
+      features.push({ type: 'Feature', properties: { id: d.id },
+        geometry: { type: 'Polygon', coordinates: [circle(z)] } });
+      if (i === 0 && !d.fromTreeSpots) labels.push({ type: 'Feature',
+        properties: { name: d.name }, geometry: { type: 'Point', coordinates: [z[0], z[1]] } });
+    });
+  }
+
+  // Legend: district → the archetypes that favor it (from the weights).
+  const rows = document.getElementById('rows');
+  for (const d of DISTRICTS) {
+    const who = NPC_ARCHETYPES
+      .filter((a) => (a.weights[d.id] || 0) > 0)
+      .sort((a, b) => (b.weights[d.id] || 0) - (a.weights[d.id] || 0))
+      .map((a) => a.name).join(', ') || '—';
+    rows.insertAdjacentHTML('beforeend',
+      `<div class="row"><span class="sw" style="background:${COLORS[d.id] || '#888'}"></span>` +
+      `<b>${d.name}</b> <span class="who">— ${who}</span></div>`);
+  }
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://tiles.openfreemap.org/styles/positron',
+    bounds: [[-122.68, 37.36], [-122.02, 37.95]],
+    fitBoundsOptions: { padding: 30 },
+    attributionControl: { compact: true },
+  });
+  map.on('load', () => {
+    map.addSource('districts', { type: 'geojson',
+      data: { type: 'FeatureCollection', features } });
+    map.addSource('labels', { type: 'geojson',
+      data: { type: 'FeatureCollection', features: labels } });
+    map.addLayer({ id: 'district-fill', type: 'fill', source: 'districts',
+      paint: { 'fill-color': ['match', ['get', 'id'],
+        ...Object.entries(COLORS).flat(), '#888'], 'fill-opacity': 0.30 } });
+    map.addLayer({ id: 'district-line', type: 'line', source: 'districts',
+      paint: { 'line-color': ['match', ['get', 'id'],
+        ...Object.entries(COLORS).flat(), '#888'], 'line-width': 1.5 } });
+    map.addLayer({ id: 'district-label', type: 'symbol', source: 'labels',
+      layout: { 'text-field': ['get', 'name'], 'text-size': 13,
+                'text-font': ['Noto Sans Bold'] },
+      paint: { 'text-color': '#222', 'text-halo-color': '#fff', 'text-halo-width': 1.6 } });
+    map.once('idle', () => { window.__mapReady = true; });
+  });
+</script>
+</body>
+</html>
