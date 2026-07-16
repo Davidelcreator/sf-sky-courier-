@@ -28,7 +28,7 @@ import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders
 const V = new URL(import.meta.url).search;
 const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
         SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS, OSM_HIDE_IDS, LOOK,
-        ROADS3D, LANDMARKS } =
+        ROADS3D, LANDMARKS, LANES } =
   await import('./config.js' + V);
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
@@ -307,6 +307,72 @@ function initGame() {
     },
     firstSymbolId,
   );
+
+  // --- Meter-true road widths + painted lane markings (vector streets) ---
+  // The style's roads are fixed-pixel lines; real streets have real
+  // widths. px = meters / metersPerPixel(zoom) via an exponential zoom
+  // curve, so a primary paints ~14 m of asphalt at every zoom. Lane
+  // counts come from LANES.BY_CLASS (tiles carry no lanes tag — LANES.md).
+  const mpp = (z) => 78271.517 * Math.cos(37.77 * DEG) / 2 ** z;
+  const mWidth = (metersExpr) => ['interpolate', ['exponential', 2], ['zoom'],
+    10, ['/', metersExpr, mpp(10)], 24, ['/', metersExpr, mpp(24)]];
+  const isOneway = ['==', ['coalesce', ['get', 'oneway'], 0], 1];
+  const lw = LANES.LANE_WIDTH_M, sh = 2 * LANES.SHOULDER_M;
+  const ROAD_WIDTHS = {
+    road_motorway: 4 * lw + sh,
+    road_trunk_primary: ['case', isOneway, 3 * lw + sh, 4 * lw + sh],
+    road_secondary_tertiary: 2 * lw + sh,
+    road_minor: ['case', isOneway, lw + sh, 2 * lw + sh],
+    road_service_track: lw + 0.7,
+    road_link: lw + sh, road_motorway_link: lw + sh,
+  };
+  for (const [baseId, metersExpr] of Object.entries(ROAD_WIDTHS)) {
+    for (const prefix of ['road', 'tunnel']) {
+      const id = baseId.replace('road', prefix);
+      const casing = id + '_casing';
+      try {
+        if (map.getLayer(id)) map.setPaintProperty(id, 'line-width', mWidth(metersExpr));
+        if (map.getLayer(casing)) {
+          map.setPaintProperty(casing, 'line-width',
+            mWidth(typeof metersExpr === 'number' ? metersExpr + 1.2 : ['+', metersExpr, 1.2]));
+        }
+      } catch (e) { /* style variant without this layer */ }
+    }
+  }
+
+  // Painted markings as thin offset line layers (minzoom-gated).
+  // Dasharray units are multiples of line-width, so dashes stay
+  // proportional at every zoom for free.
+  const mB255 = Math.round(LANES.MARKING_BRIGHTNESS * 255);
+  const markWidth = ['max', 0.7, mWidth(0.15)];
+  const laneMarkLayers = [
+    { id: 'lane-yellow-center', // two-way majors: solid yellow centreline
+      filter: ['all', ['in', ['get', 'class'], ['literal', ['trunk', 'primary', 'secondary', 'tertiary']]],
+               ['!', isOneway]],
+      paint: { 'line-color': `rgb(${mB255},${Math.round(mB255 * 0.82)},${Math.round(mB255 * 0.3)})`,
+               'line-width': markWidth } },
+    { id: 'lane-white-center', // one-way majors: dashed white centre
+      filter: ['all', ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]], isOneway],
+      paint: { 'line-color': `rgba(${mB255},${mB255},${mB255},0.8)`,
+               'line-width': markWidth, 'line-dasharray': [20, 40] } },
+    { id: 'lane-dash-left',    // multi-lane classes: dashes one lane out
+      filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]],
+      paint: { 'line-color': `rgba(${mB255},${mB255},${mB255},0.8)`,
+               'line-width': markWidth, 'line-dasharray': [20, 40],
+               'line-offset': mWidth(LANES.LANE_WIDTH_M) } },
+    { id: 'lane-dash-right',
+      filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]],
+      paint: { 'line-color': `rgba(${mB255},${mB255},${mB255},0.8)`,
+               'line-width': markWidth, 'line-dasharray': [20, 40],
+               'line-offset': ['*', -1, mWidth(LANES.LANE_WIDTH_M)] } },
+  ];
+  for (const spec of laneMarkLayers) {
+    map.addLayer({
+      id: spec.id, type: 'line', source: buildingSourceId,
+      'source-layer': 'transportation', minzoom: 15,
+      filter: spec.filter, paint: spec.paint,
+    }, firstSymbolId);
+  }
 
   // Hide the tall gray boxes OSM extrudes for the Bay Bridge towers: we
   // draw nicer towers ourselves, and removing the blocks lets the roadway
@@ -1488,7 +1554,8 @@ function refreshRoad3D(nowMs) {
         // impossible with unclippable raster-DEM terrain — QUESTIONS.md).
         const lift = isTunnel ? 0 : ROADS3D.LIFT_PER_LAYER * Math.max(1, layer);
         const kind = isBridge ? 'bridge' : isTunnel ? 'tunnel' : 'ramp';
-        ways.push({ pts, cls: p.class, lift, kind, ramp: isRamp });
+        ways.push({ pts, cls: p.class, lift, kind, ramp: isRamp,
+                    oneway: p.oneway === 1 || isRamp });
         touch(pts[0], kind, lift);
         touch(pts[pts.length - 1], kind, lift);
         if (isTunnel) {
@@ -1528,15 +1595,38 @@ function refreshRoad3D(nowMs) {
   const group = new THREE.Group();
   const segs = [];
   const deckMat = road3D.deckMat || (road3D.deckMat =
-    new THREE.MeshLambertMaterial({ color: 0x454b54, side: THREE.DoubleSide }));
+    new THREE.MeshLambertMaterial({ color: 0x454b54, side: THREE.DoubleSide, vertexColors: true }));
   const tunnelMat = road3D.tunnelMat || (road3D.tunnelMat =
-    new THREE.MeshLambertMaterial({ color: 0x2c2e33, side: THREE.DoubleSide }));
-  const positions = []; const tunnelPositions = [];
+    new THREE.MeshLambertMaterial({ color: 0x2c2e33, side: THREE.DoubleSide, vertexColors: true }));
+  const mB = LANES.MARKING_BRIGHTNESS;
+  const whiteMat = road3D.whiteMat || (road3D.whiteMat =
+    new THREE.MeshLambertMaterial({ color: new THREE.Color(mB, mB, mB) }));
+  const yellowMat = road3D.yellowMat || (road3D.yellowMat =
+    new THREE.MeshLambertMaterial({ color: new THREE.Color(mB, mB * 0.82, mB * 0.28) }));
+  const positions = []; const colors = [];
+  const tunnelPositions = []; const tunnelColors = [];
+  const whitePos = []; const yellowPos = [];
   const pillarSpots = []; // {x, z, top}
+  // Position-hashed luminance: stable across rebuilds (no flicker), so
+  // the asphalt gets quiet tonal wear instead of a flat paint fill.
+  const lumAt = (lng2, lat2) =>
+    0.93 + (Math.abs(Math.sin(lng2 * 12345.678 + lat2 * 789.123)) % 1) * 0.14;
 
   for (const w of ways) {
-    const width = ROADS3D.WIDTHS[w.ramp ? 'ramp' : w.cls] ?? ROADS3D.WIDTHS.default;
+    // Lane count from class + direction (the tiles carry no lanes tag —
+    // see LANES.md), width from the count.
+    const li = LANES.BY_CLASS[w.cls] || [1, 1];
+    const lanes = w.ramp ? LANES.RAMP_LANES : (w.oneway ? li[0] : li[1] * 2);
+    const width = lanes * LANES.LANE_WIDTH_M + 2 * LANES.SHOULDER_M;
     const halfW = width / 2;
+    // Divider offsets from the centreline: between every adjacent lane
+    // pair; on two-way roads the centre one is the yellow line instead.
+    const dividers = [];
+    for (let k = 1; k < lanes; k++) {
+      const off = -lanes * LANES.LANE_WIDTH_M / 2 + k * LANES.LANE_WIDTH_M;
+      if (!w.oneway && Math.abs(off) < 0.1) continue; // centre → yellow line
+      dividers.push(off);
+    }
 
     // Resample: subdivide long legs so the lift profile bends smoothly.
     const samples = [];
@@ -1578,6 +1668,7 @@ function refreshRoad3D(nowMs) {
 
     // Emit a solid box-strip: 4 corners per sample, 4 quads per leg.
     const out = w.kind === 'tunnel' ? tunnelPositions : positions;
+    const outCol = w.kind === 'tunnel' ? tunnelColors : colors;
     let prev = null;
     for (let i = 0; i < samples.length; i++) {
       const h = (tA + (tB - tA) * (arc[i] / total)) + liftAt(arc[i]);
@@ -1589,14 +1680,20 @@ function refreshRoad3D(nowMs) {
       let ax = -(pB.z - pA.z), az = (pB.x - pA.x);
       const al = Math.hypot(ax, az) || 1; ax = ax / al * halfW; az = az / al * halfW;
       const lifted = liftAt(arc[i]) > 1.5; // above ground = deserves a rail
+      const lum = lumAt(samples[i][0], samples[i][1]);
       const cur = {
         tl: [pos.x - ax, pos.y, pos.z - az], tr: [pos.x + ax, pos.y, pos.z + az],
         bl: [pos.x - ax, pos.y - 0.9, pos.z - az], br: [pos.x + ax, pos.y - 0.9, pos.z + az],
         rl: [pos.x - ax, pos.y + 1.0, pos.z - az], rr: [pos.x + ax, pos.y + 1.0, pos.z + az],
-        lifted,
+        cx: pos.x, cy: pos.y, cz: pos.z,
+        axn: ax / halfW, azn: az / halfW,
+        lifted, lum,
       };
       if (prev) {
-        const quad = (a, b, c, d) => { out.push(...a, ...b, ...c, ...a, ...c, ...d); };
+        const quad = (a, b, c, d) => {
+          out.push(...a, ...b, ...c, ...a, ...c, ...d);
+          for (let q = 0; q < 6; q++) outCol.push(cur.lum, cur.lum, cur.lum);
+        };
         quad(prev.tl, prev.tr, cur.tr, cur.tl);   // top
         quad(prev.bl, cur.bl, cur.br, prev.br);   // bottom
         quad(prev.tl, cur.tl, cur.bl, prev.bl);   // left side
@@ -1605,6 +1702,45 @@ function refreshRoad3D(nowMs) {
         if (prev.lifted && cur.lifted) {
           quad(prev.tl, cur.tl, cur.rl, prev.rl); // left rail
           quad(prev.tr, prev.rr, cur.rr, cur.tr); // right rail
+        }
+
+        // --- Painted lane markings, emitted with the geometry ---
+        // Flat strips 6 cm above the surface: dashed white between
+        // same-direction lanes, solid yellow centreline on two-way ways.
+        const legLen = arc[i] - prevArc;
+        if (legLen > 0.01 && w.kind !== 'tunnel') {
+          const strip = (buf, off, ww, t0, t1) => {
+            // Sub-quad between fractions t0..t1 of this leg at lateral
+            // offset `off` (metres from centreline), half-width `ww`.
+            const ix = (t) => prev.cx + (cur.cx - prev.cx) * t;
+            const iy = (t) => prev.cy + (cur.cy - prev.cy) * t + 0.06;
+            const iz = (t) => prev.cz + (cur.cz - prev.cz) * t;
+            const axn = cur.axn, azn = cur.azn;
+            const a = [ix(t0) + axn * (off - ww), iy(t0), iz(t0) + azn * (off - ww)];
+            const b = [ix(t0) + axn * (off + ww), iy(t0), iz(t0) + azn * (off + ww)];
+            const c = [ix(t1) + axn * (off + ww), iy(t1), iz(t1) + azn * (off + ww)];
+            const d = [ix(t1) + axn * (off - ww), iy(t1), iz(t1) + azn * (off - ww)];
+            buf.push(...a, ...b, ...c, ...a, ...c, ...d);
+          };
+          if (!w.oneway) strip(yellowPos, 0, 0.15, 0, 1); // solid centre
+          if (dividers.length) {
+            const period = LANES.DASH_LEN_M + LANES.DASH_GAP_M;
+            // Walk the dash cycle across this leg in arc-length space.
+            let s = prevArc;
+            while (s < arc[i]) {
+              const phase = s % period;
+              const dashEnd = phase < LANES.DASH_LEN_M
+                ? Math.min(arc[i], s + (LANES.DASH_LEN_M - phase))
+                : null;
+              if (dashEnd !== null) {
+                const t0 = (s - prevArc) / legLen, t1 = (dashEnd - prevArc) / legLen;
+                for (const off of dividers) strip(whitePos, off, 0.08, t0, t1);
+                s = dashEnd + LANES.DASH_GAP_M;
+              } else {
+                s += period - phase;
+              }
+            }
+          }
         }
         segs.push({
           // +0.35 = the ribbon's visible top surface (see toScene above),
@@ -1628,18 +1764,18 @@ function refreshRoad3D(nowMs) {
   }
 
   // One mesh per material — cheap no matter how many ways.
-  if (positions.length) {
+  const addMesh = (pos, mat, col) => {
+    if (!pos.length) return;
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    if (col) geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     geo.computeVertexNormals();
-    group.add(new THREE.Mesh(geo, deckMat));
-  }
-  if (tunnelPositions.length) {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(tunnelPositions, 3));
-    geo.computeVertexNormals();
-    group.add(new THREE.Mesh(geo, tunnelMat));
-  }
+    group.add(new THREE.Mesh(geo, mat));
+  };
+  addMesh(positions, deckMat, colors);
+  addMesh(tunnelPositions, tunnelMat, tunnelColors);
+  addMesh(whitePos, whiteMat, null);
+  addMesh(yellowPos, yellowMat, null);
   // Tunnel portals: a dark frame wherever a tunnel way ends at ground
   // (not where two tunnel ways continue into each other), so entrances
   // read as entrances even though the corridor runs at surface level.
@@ -1799,6 +1935,7 @@ function buildBridges() {
   const poleMat = new THREE.MeshLambertMaterial({ color: 0x2b2f36 });
   const lampMat = new THREE.MeshBasicMaterial({ color: 0xfff0c0 });     // glowing lamp head
   const polePositions = []; // lamp-post bases, collected across every bridge
+  const dashSpots = [];     // painted lane-dash strips, ditto
 
   for (const b of BRIDGES) {
     const mat = new THREE.MeshLambertMaterial({ color: b.color });
@@ -1835,6 +1972,19 @@ function buildBridges() {
       // Guard rails: a low wall along each edge of the deck.
       const along = c.clone().sub(a).normalize();
       const across = new THREE.Vector3(-along.z, 0, along.x);
+
+      // Painted lane dashes: 3 lanes per side on the big decks, so two
+      // dashed dividers each side of the yellow median (offsets in m).
+      const theta = Math.atan2(along.x, along.z);
+      for (let d = 4.5; d < len - 4.5; d += LANES.DASH_LEN_M + LANES.DASH_GAP_M) {
+        const base = a.clone().lerp(c, d / len);
+        for (const off of [-7.4, -3.9, 3.9, 7.4]) {
+          dashSpots.push({
+            x: base.x + across.x * off, z: base.z + across.z * off,
+            y: base.y + 1.56, theta,
+          });
+        }
+      }
       for (const side of [-1, 1]) {
         const rail = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.1, len), railMat);
         rail.position.copy(slab.position)
@@ -1964,6 +2114,22 @@ function buildBridges() {
         group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 32, 0.8, 6), mat));
       }
     }
+  }
+
+  // Painted lane dashes across all decks — one InstancedMesh.
+  if (dashSpots.length) {
+    const mB = LANES.MARKING_BRIGHTNESS;
+    const dashes = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.16, 0.04, LANES.DASH_LEN_M),
+      new THREE.MeshLambertMaterial({ color: new THREE.Color(mB, mB, mB) }),
+      dashSpots.length);
+    const dm = new THREE.Matrix4();
+    dashSpots.forEach((s, i) => {
+      dm.makeRotationY(s.theta);
+      dm.setPosition(s.x, s.y, s.z);
+      dashes.setMatrixAt(i, dm);
+    });
+    group.add(dashes);
   }
 
   // Lamp posts (one InstancedMesh for the shafts, one for the glowing

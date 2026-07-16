@@ -322,6 +322,26 @@ export const LANDMARKS = [
 // The vector tiles tag every way with brunnel (bridge/tunnel), ramp=1
 // (on/off-ramps) and layer (vertical stacking). ROADS3D turns those into
 // drivable sloped geometry near the player. All knobs on the P panel.
+// ============================================================
+// LANES — lane counts, road widths, painted markings
+// ============================================================
+// The vector tiles carry NO `lanes` tag (schema limitation — see
+// LANES.md), so lane counts default by road class + oneway direction.
+// Widths everywhere derive from these counts.
+export const LANES = {
+  // [lanes when oneway, lanes PER DIRECTION when two-way]
+  BY_CLASS: {
+    motorway: [4, 2], trunk: [3, 2], primary: [3, 2],
+    secondary: [2, 1], tertiary: [2, 1], minor: [1, 1], service: [1, 1],
+  },
+  RAMP_LANES: 1,        // ramp=1 ways are single-lane
+  LANE_WIDTH_M: 3.3,    // one traffic lane
+  SHOULDER_M: 0.5,      // extra edge each side
+  DASH_LEN_M: 3,        // painted dash length…
+  DASH_GAP_M: 6,        // …and gap between dashes
+  MARKING_BRIGHTNESS: 0.85, // 0..1 — how loud the paint reads
+};
+
 export const ROADS3D = {
   ENABLED: true,
   LIFT_PER_LAYER: 7,    // metres of elevation per OSM layer step (default layer=1)
