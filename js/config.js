@@ -302,6 +302,21 @@ export const BUILDING_COLORS = [
 // filter in main.js (the raw data includes the sea FLOOR, which would
 // render the bay as a giant pit).
 // ============================================================
+// LANDMARKS — buildings that should NOT look like offices
+// ============================================================
+// Buildings within `radius` metres of `center` (and at least 6 m tall)
+// are discovered at runtime (same mechanism as the Golden Gate tower
+// recolour), painted `color`, and excluded from the office window-grid
+// overlay. windows: 'arch' swaps in an arched-opening pattern (Ferry
+// Building arcade); 'none' leaves clean stone (Palace of Fine Arts).
+export const LANDMARKS = [
+  { name: 'Ferry Building', center: [-122.3937, 37.7955], radius: 105,
+    color: '#cdc3ae', windows: 'arch' },
+  { name: 'Palace of Fine Arts', center: [-122.4487, 37.8029], radius: 140,
+    color: '#b9a88f', windows: 'none' },
+];
+
+// ============================================================
 // 3D ROAD NETWORK — data-driven ramps, overpasses and tunnels
 // ============================================================
 // The vector tiles tag every way with brunnel (bridge/tunnel), ramp=1

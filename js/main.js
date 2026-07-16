@@ -28,7 +28,7 @@ import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders
 const V = new URL(import.meta.url).search;
 const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
         SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS, OSM_HIDE_IDS, LOOK,
-        ROADS3D } =
+        ROADS3D, LANDMARKS } =
   await import('./config.js' + V);
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
@@ -256,6 +256,39 @@ function initGame() {
         'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
         'fill-extrusion-opacity': LOOK.windowOpacity,
         'fill-extrusion-vertical-gradient': false, // gradient already on the tint layer
+      },
+    },
+    firstSymbolId,
+  );
+
+  // Arched openings for 'arch' landmarks (Ferry Building arcade): same
+  // overlay trick as the windows, different punch shape. Starts matching
+  // nothing; applyTowerRecolor() points it at the landmark's building ids
+  // once they're discovered.
+  const arch = document.createElement('canvas');
+  arch.width = 14; arch.height = 18;
+  const actx = arch.getContext('2d');
+  actx.clearRect(0, 0, 14, 18);
+  actx.fillStyle = 'rgba(52, 44, 34, 1)';        // deep arcade shadow
+  actx.fillRect(4, 8, 6, 8);                     // arch body
+  actx.beginPath();
+  actx.arc(7, 8, 3, Math.PI, 0);                 // rounded arch top
+  actx.fill();
+  map.addImage('window-arch', actx.getImageData(0, 0, 14, 18), { pixelRatio: 1 });
+  map.addLayer(
+    {
+      id: '3d-buildings-arches',
+      source: buildingSourceId,
+      'source-layer': 'building',
+      type: 'fill-extrusion',
+      minzoom: 15,
+      filter: ['in', ['id'], ['literal', []]],
+      paint: {
+        'fill-extrusion-pattern': 'window-arch',
+        'fill-extrusion-height': ['-', ['coalesce', ['get', 'render_height'], 5], 0.5],
+        'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+        'fill-extrusion-opacity': 0.55,
+        'fill-extrusion-vertical-gradient': false,
       },
     },
     firstSymbolId,
@@ -2759,38 +2792,86 @@ const recolorTowers = BRIDGES
     radius: b.recolorRadius || 75, // metres from a tower coord that counts as "tower"
   }));
 const recolorTowerIds = new Set();
+// Landmark buildings (Ferry Building, Palace of Fine Arts, …) discovered
+// the same way: one Set of building ids per LANDMARKS entry.
+const landmarkIds = LANDMARKS.map(() => new Set());
 
-// Scan freshly-fetched building features for tower parts near a recolour
-// bridge; when we find new ones, re-apply the colour rule. Fully guarded so
-// a bad expression can never break the render loop.
+// Scan freshly-fetched building features for bridge-tower parts and
+// landmark buildings; when we find new ones, re-apply paint + filters.
+// Fully guarded so a bad expression can never break the render loop.
 function updateTowerRecolor(feats) {
-  if (!recolorTowers.length) return;
   let grew = false;
   for (const f of feats) {
-    if (f.id == null || recolorTowerIds.has(f.id)) continue;
+    if (f.id == null) continue;
     if ((f.properties.render_height || 0) < 6) continue; // skip ground-level footprints only
-    let c = f.geometry.coordinates;
-    while (Array.isArray(c[0])) c = c[0];     // first vertex, representative point
-    for (const rc of recolorTowers) {
-      if (rc.towers.some((t) => metersBetween(c[0], c[1], t[0], t[1]) < rc.radius)) {
-        recolorTowerIds.add(f.id);
-        grew = true;
-        break;
+    // Sample up to 8 vertices around the footprint — a long building
+    // (the Ferry Building is ~200 m) can start outside the radius even
+    // though most of it is inside.
+    let ring = f.geometry.coordinates;
+    while (Array.isArray(ring[0][0])) ring = ring[0];
+    const step = Math.max(1, Math.floor(ring.length / 8));
+    const nearAny = (lng2, lat2, r) => {
+      for (let k = 0; k < ring.length; k += step) {
+        if (metersBetween(ring[k][0], ring[k][1], lng2, lat2) < r) return true;
+      }
+      return false;
+    };
+    if (!recolorTowerIds.has(f.id)) {
+      for (const rc of recolorTowers) {
+        if (rc.towers.some((t) => nearAny(t[0], t[1], rc.radius))) {
+          recolorTowerIds.add(f.id);
+          grew = true;
+          break;
+        }
       }
     }
+    LANDMARKS.forEach((lm, i) => {
+      if (landmarkIds[i].has(f.id)) return;
+      if (nearAny(lm.center[0], lm.center[1], lm.radius)) {
+        landmarkIds[i].add(f.id);
+        grew = true;
+      }
+    });
   }
   if (grew) applyTowerRecolor();
 }
 
 function applyTowerRecolor() {
   try {
-    if (!map.getLayer('3d-buildings') || !recolorTowerIds.size) return;
-    map.setPaintProperty('3d-buildings', 'fill-extrusion-color', [
-      'case',
-      ['in', ['id'], ['literal', [...recolorTowerIds]]],
-      recolorTowers[0].css,          // all recolour bridges share one colour today
-      buildingColorExpression(),     // everything else keeps its height colour
-    ]);
+    if (!map.getLayer('3d-buildings')) return;
+    // Color rule: bridge towers → bridge paint; each landmark → its own
+    // stone color; everything else keeps the height/variety tint.
+    const expr = ['case'];
+    if (recolorTowerIds.size) {
+      expr.push(['in', ['id'], ['literal', [...recolorTowerIds]]], recolorTowers[0].css);
+    }
+    LANDMARKS.forEach((lm, i) => {
+      if (landmarkIds[i].size) {
+        expr.push(['in', ['id'], ['literal', [...landmarkIds[i]]]], lm.color);
+      }
+    });
+    if (expr.length > 1) {
+      expr.push(buildingColorExpression());
+      map.setPaintProperty('3d-buildings', 'fill-extrusion-color', expr);
+    }
+
+    // Landmarks don't wear office windows: exclude them from the grid
+    // layer; 'arch' landmarks get the arched-opening layer instead.
+    const excluded = [];
+    const archIds = [];
+    LANDMARKS.forEach((lm, i) => {
+      if (lm.windows !== 'grid') excluded.push(...landmarkIds[i]);
+      if (lm.windows === 'arch') archIds.push(...landmarkIds[i]);
+    });
+    const hide = OSM_HIDE_IDS && OSM_HIDE_IDS.length
+      ? ['!', ['in', ['id'], ['literal', OSM_HIDE_IDS]]] : true;
+    if (map.getLayer('3d-buildings-windows')) {
+      map.setFilter('3d-buildings-windows', ['all', hide,
+        ['!', ['in', ['id'], ['literal', excluded]]]]);
+    }
+    if (map.getLayer('3d-buildings-arches')) {
+      map.setFilter('3d-buildings-arches', ['in', ['id'], ['literal', archIds]]);
+    }
   } catch (e) {
     /* never let a repaint break the frame */
   }
