@@ -128,6 +128,7 @@ export const CAMERA = {
     { name: 'SKY VIEW', zoom: 16.4, pitch: 55 },  // high + wide, for navigating
     { name: 'TOP-DOWN', zoom: 16.6, pitch: 15 },  // like the paper map
     { name: 'CINEMA',   zoom: 17.6, pitch: 78 },  // low drama, big horizon
+    { name: 'CLOSE',    zoom: 21.3, pitch: 74 },  // right on the bumper — feel the road
   ],
 };
 
