@@ -430,6 +430,28 @@ function pathPoint(npc, out) {
 }
 
 const scratch = { lng: 0, lat: 0, heading: 0 };
+const scratch2 = { lng: 0, lat: 0, heading: 0 }; // for lookahead probes
+
+// Walk `meters` along the polyline (in walker.dir), bouncing at the ends.
+// Mutates walker's {seg, segT, dir} — pass a copy for what-if lookahead.
+function advanceAlongPath(walker, meters) {
+  let remaining = meters;
+  while (remaining > 0) {
+    const a = walker.path.pts[walker.seg], b = walker.path.pts[walker.seg + 1];
+    const segLen = ctx.metersBetween(a[0], a[1], b[0], b[1]) || 0.001;
+    if (walker.dir > 0) {
+      const toEnd = segLen * (1 - walker.segT);
+      if (remaining < toEnd) { walker.segT += remaining / segLen; remaining = 0; }
+      else if (walker.seg < walker.path.pts.length - 2) { remaining -= toEnd; walker.seg++; walker.segT = 0; }
+      else { walker.segT = 1; walker.dir = -1; remaining = 0; }
+    } else {
+      const toStart = segLen * walker.segT;
+      if (remaining < toStart) { walker.segT -= remaining / segLen; remaining = 0; }
+      else if (walker.seg > 0) { remaining -= toStart; walker.seg--; walker.segT = 1; }
+      else { walker.segT = 0; walker.dir = 1; remaining = 0; }
+    }
+  }
+}
 
 function trySpawnOne(nowMs) {
   if (!N.paths.length) return false;
@@ -456,6 +478,7 @@ function trySpawnOne(nowMs) {
 
   const district = districtAt(scratch.lng, scratch.lat);
   const arch = rollArchetype(district);
+  npc.district = district; // kept for debugging (game.npcs.npcs[i].district)
   buildNPC(npc, arch, nowMs);
   return true;
 }
@@ -544,23 +567,7 @@ function updateNPC(npc, dt, nowMs) {
 
   // --- state machine ---
   if (npc.state === 'walk') {
-    // stroll along the polyline; bounce back at the ends
-    let remaining = npc.speed * dt;
-    while (remaining > 0) {
-      const a = npc.path.pts[npc.seg], b = npc.path.pts[npc.seg + 1];
-      const segLen = ctx.metersBetween(a[0], a[1], b[0], b[1]) || 0.001;
-      if (npc.dir > 0) {
-        const toEnd = segLen * (1 - npc.segT);
-        if (remaining < toEnd) { npc.segT += remaining / segLen; remaining = 0; }
-        else if (npc.seg < npc.path.pts.length - 2) { remaining -= toEnd; npc.seg++; npc.segT = 0; }
-        else { npc.segT = 1; npc.dir = -1; remaining = 0; }
-      } else {
-        const toStart = segLen * npc.segT;
-        if (remaining < toStart) { npc.segT -= remaining / segLen; remaining = 0; }
-        else if (npc.seg > 0) { remaining -= toStart; npc.seg--; npc.segT = 1; }
-        else { npc.segT = 0; npc.dir = 1; remaining = 0; }
-      }
-    }
+    advanceAlongPath(npc, npc.speed * dt);
     if (nowMs > npc.stateUntil) {
       npc.state = 'idle'; npc.stateUntil = nowMs + 1500 + N.rand() * 4000;
       switchAnim(npc, 'idle');
@@ -610,12 +617,22 @@ function updateNPC(npc, dt, nowMs) {
   npc.group.rotation.y = -face + Math.PI; // model faces +Z; compass → scene yaw
   if (npc.arch.wobble) npc.group.rotation.z = Math.sin(nowMs / 450 + npc.phase) * 0.06;
 
-  // --- staggered safety checks (every ~0.6 s, not every frame) ---
+  // --- staggered safety checks (every ~0.5 s, not every frame) ---
   if (nowMs > npc.checkAt) {
-    npc.checkAt = nowMs + 600;
+    npc.checkAt = nowMs + 500;
+    // Hard rule: an NPC may NEVER stand in a roadway. If one slipped in
+    // anyway (usually: spawned before a crossing road's tile streamed
+    // in), recycle it — better a quiet respawn than a road-blocker.
+    if (inRoadway(p.x, p.z, 0)) { npc.dead = true; return 0; }
     if (npc.state === 'walk') {
-      // about to wander into a crossing street's roadway? Turn around.
-      if (inRoadway(p.x, p.z, 0.2)) { npc.dir *= -1; npc.segT = Math.max(0, Math.min(1, npc.segT)); }
+      // LOOK AHEAD: if the spot we'll reach in ~1.5 s is inside any
+      // roadway (a crossing street, say), turn around BEFORE stepping in.
+      const probe = { path: npc.path, seg: npc.seg, segT: npc.segT, dir: npc.dir,
+                      side: npc.side, offset: npc.offset };
+      advanceAlongPath(probe, npc.speed * 1.5);
+      pathPoint(probe, scratch2);
+      const ahead = ctx.toScene(scratch2.lng, scratch2.lat, 0);
+      if (inRoadway(ahead.x, ahead.z, 0.3)) npc.dir *= -1;
       // walked into a building footprint (bad data)? Turn around.
       else if (ctx.buildingHeightAt(scratch.lng, scratch.lat) > 0) npc.dir *= -1;
     }
@@ -727,6 +744,7 @@ export async function initNPCs(context) {
   });
 
   if (N.shot) buildShotLineup();
+  N.inRoadway = inRoadway; // exposed for the acceptance tests
   window.game && (window.game.npcs = N); // console peek
   return N.group;
 }
@@ -794,7 +812,7 @@ export function updateNPCs(dt, nowMs) {
     const npc = N.npcs[i];
     if (N.npcs.length > target) { despawn(npc); continue; } // density dial turned down
     const d = updateNPC(npc, dt, nowMs);
-    if (d > NPCS.DESPAWN_M) despawn(npc); // recycled somewhere closer next frame
+    if (npc.dead || d > NPCS.DESPAWN_M) despawn(npc); // recycled next frame
   }
   window.__npcCount = N.npcs.length;
 }
