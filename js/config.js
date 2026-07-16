@@ -161,9 +161,13 @@ export const GRAPHICS = {
   // (Sun + sky colors moved to the LOOK object below — one place for
   // every lighting/grade knob, editable live with the P panel.)
   PRESETS: {
-    low:    { atmosphere: false, sceneryMult: 0.4, trafficMax: 8,  npcMax: 10, shadows: false, waterReflect: false },
-    medium: { atmosphere: true,  sceneryMult: 0.8, trafficMax: 16, npcMax: 24, shadows: false, waterReflect: true },
-    high:   { atmosphere: true,  sceneryMult: 1.0, trafficMax: 24, npcMax: 40, shadows: true,  waterReflect: true },
+    // npcMax: measured 2026-07-16 (RX 5700 XT, downtown, q=high): ~0.09
+    // fps per NPC. 24 NPCs held the 40-fps floor (40.3 avg over 3 runs);
+    // 28 straddled it and 40 clearly dipped, so high stops at 24. Turn
+    // the P-panel "NPC crowd density" dial up if your machine has spare.
+    low:    { atmosphere: false, sceneryMult: 0.4, trafficMax: 8,  npcMax: 8,  shadows: false, waterReflect: false },
+    medium: { atmosphere: true,  sceneryMult: 0.8, trafficMax: 16, npcMax: 16, shadows: false, waterReflect: true },
+    high:   { atmosphere: true,  sceneryMult: 1.0, trafficMax: 24, npcMax: 24, shadows: true,  waterReflect: true },
   },
 };
 

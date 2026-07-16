@@ -44,6 +44,7 @@ const N = {
   refLng: null, refLat: null,
   rand: Math.random,    // swapped for a seeded generator in shot mode
   shot: null,           // ?npcshot lineup mode (deterministic screenshots)
+  maxOverride: null,    // ?npcmax=N crowd-size override (FPS testing)
   spawnCursor: 0,
   frame: 0,
 };
@@ -686,6 +687,7 @@ export async function initNPCs(context) {
 
   // Shot mode? (?npcshot=1 → deterministic archetype lineup for captures)
   const q = new URLSearchParams(window.location.search);
+  if (q.has('npcmax')) N.maxOverride = Math.max(0, parseInt(q.get('npcmax'), 10) || 0);
   if (q.has('npcshot')) {
     // ?npcshot=<archetype id> shoots 6 characters of one archetype;
     // anything else (?npcshot=1) lines up all 8 archetypes.
@@ -803,7 +805,10 @@ export function updateNPCs(dt, nowMs) {
   }
   refreshPaths(nowMs);
 
-  const target = Math.round((ctx.gfx().npcMax || 0) * NPCS.DENSITY);
+  // ?npcmax=N overrides the crowd size — the FPS harness A/Bs with it
+  // (npcmax=0 measures the game with the NPC system idle).
+  const target = N.maxOverride !== null ? N.maxOverride
+    : Math.round((ctx.gfx().npcMax || 0) * NPCS.DENSITY);
   // spawn gently (a couple per frame) so a quality change doesn't hitch
   let attempts = 0;
   while (N.npcs.length < target && attempts < 6) { trySpawnOne(nowMs); attempts++; }
