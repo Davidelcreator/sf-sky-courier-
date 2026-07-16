@@ -340,6 +340,9 @@ export const LANES = {
   DASH_LEN_M: 3,        // painted dash length…
   DASH_GAP_M: 6,        // …and gap between dashes
   MARKING_BRIGHTNESS: 0.85, // 0..1 — how loud the paint reads
+  // Trees may not stand in the roadway: any tree within a road's real
+  // width (from the lane table) PLUS this shoulder margin gets culled.
+  TREE_SHOULDER_M: 2,
 };
 
 export const ROADS3D = {

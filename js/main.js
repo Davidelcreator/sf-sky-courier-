@@ -627,11 +627,14 @@ const LOOK_PANEL = [
   ['windowOpacity', 'Facade windows (0=off)', 0, 1, 0.02],
   ['gradeBlur', 'Softness (blur px)', 0, 2, 0.05],
   ['grainOpacity', 'Film grain', 0, 0.3, 0.005],
-  // 'r3:'-prefixed keys live in ROADS3D (the 3D road network) instead of
-  // LOOK; changing one forces the road geometry to rebuild.
+  // Prefixed keys live in other config objects: 'r3:' → ROADS3D,
+  // 'ln:' → LANES. Changing one forces the affected caches to rebuild.
   ['r3:LIFT_PER_LAYER', 'Overpass lift m/layer', 3, 15, 0.5],
   ['r3:TAPER_M', 'Bridge-end taper m', 15, 120, 5],
   ['r3:PILLAR_EVERY_M', 'Pillar spacing m', 15, 100, 5],
+  ['ln:LANE_WIDTH_M', 'Lane width m', 2.6, 4, 0.1],
+  ['ln:MARKING_BRIGHTNESS', 'Marking brightness', 0.3, 1, 0.05],
+  ['ln:TREE_SHOULDER_M', 'Tree shoulder margin m', 0, 8, 0.5],
 ];
 
 let lookPanelEl = null;
@@ -650,10 +653,12 @@ function toggleLookPanel() {
   el.innerHTML = '<b>THE LOOK</b> <small>(P to close — values in config.js LOOK)</small><br>';
   for (const row of LOOK_PANEL) {
     const [rawKey, label] = row;
-    // 'r3:' rows edit the ROADS3D config (3D road network) instead of LOOK.
-    const isRoad = rawKey.startsWith('r3:');
-    const obj = isRoad ? ROADS3D : LOOK;
-    const key = isRoad ? rawKey.slice(3) : rawKey;
+    // Prefixed rows edit other config objects (see LOOK_PANEL comment).
+    const PREFIXED = { 'r3:': ROADS3D, 'ln:': LANES };
+    const pref = Object.keys(PREFIXED).find((p2) => rawKey.startsWith(p2));
+    const isRoad = !!pref;
+    const obj = pref ? PREFIXED[pref] : LOOK;
+    const key = pref ? rawKey.slice(pref.length) : rawKey;
     const wrap = document.createElement('label');
     wrap.style.cssText = 'display:block;margin-top:4px';
     const isColor = row[2] === 'color';
@@ -673,8 +678,11 @@ function toggleLookPanel() {
     input.addEventListener('input', () => {
       obj[key] = isColor ? input.value : parseFloat(input.value);
       val.textContent = ' ' + obj[key];
-      if (isRoad) road3D.lastRefresh = -Infinity; // force a road rebuild
-      else applyLook();
+      if (isRoad) {
+        road3D.lastRefresh = -Infinity;         // force a road rebuild
+        road3D.whiteMat = road3D.yellowMat = null; // marking brightness re-bakes
+        treeCull.lastRun = -Infinity;           // and trees re-validate
+      } else applyLook();
     });
     wrap.append(label + ' ', input, val);
     el.appendChild(wrap);
@@ -2212,6 +2220,7 @@ function buildTrees() {
       // narrow+tall (columnar) and everything between.
       trees.push({
         x, z, y: center.y + 4.4 * s, s,
+        trunkY: center.y + 1.5 * s,   // so validation can restore a trunk
         shapeH: 0.7 + rand() * 1.0,   // horizontal spread of side lobes
         shapeV: 0.75 + rand() * 0.8,  // vertical stretch of the crown
       });
@@ -2219,6 +2228,7 @@ function buildTrees() {
   }
   trunks.count = i;
 
+  three.trunks = trunks;
   three.canopies = canopies;
   three.treeData = trees;
   rebuildTreeLobes(); // positions every lobe + tints (reads LOOK)
@@ -2226,6 +2236,93 @@ function buildTrees() {
   const group = new THREE.Group();
   group.add(trunks, canopies);
   return group;
+}
+
+// --- Tree placement validation ------------------------------------------
+// Trees are scattered into park circles at load, but roads cross parks
+// (JFK Drive, Marina Blvd, the Presidio…). The tiles for those areas
+// only stream in near the camera, so validation runs continuously: any
+// tree standing within a road's real width (lane table) + shoulder
+// margin gets culled. Decisions are remembered per tree.
+const treeCull = { culled: new Set(), checked: new Set(),
+                   lastRun: -Infinity, lng: null, lat: null, margin: null };
+
+function validateTrees(nowMs) {
+  const trunks = three.trunks, trees = three.treeData;
+  if (!trunks || !trees || !buildingSourceId) return;
+  const marginChanged = treeCull.margin !== LANES.TREE_SHOULDER_M;
+  const moved = treeCull.lng === null ? Infinity
+    : metersBetween(car.lng, car.lat, treeCull.lng, treeCull.lat);
+  if (!marginChanged && nowMs - treeCull.lastRun < 3000 && moved < 400) return;
+  treeCull.lastRun = nowMs; treeCull.lng = car.lng; treeCull.lat = car.lat;
+
+  const matrix = new THREE.Matrix4();
+  const quat = new THREE.Quaternion();
+  if (marginChanged) {
+    // Margin slider moved: forget every decision and restore all trunks;
+    // trees re-validate as their tiles come back into range.
+    treeCull.margin = LANES.TREE_SHOULDER_M;
+    treeCull.checked.clear();
+    treeCull.culled.clear();
+    trees.forEach((t, i) => {
+      matrix.compose(new THREE.Vector3(t.x, t.trunkY, t.z), quat,
+                     new THREE.Vector3(t.s, t.s, t.s));
+      trunks.setMatrixAt(i, matrix);
+    });
+    trunks.instanceMatrix.needsUpdate = true;
+  }
+
+  // Drivable-road segments near the car, in scene metres, with each
+  // road's REAL half-width (lane table) plus the shoulder margin.
+  const feats = map.querySourceFeatures(buildingSourceId, { sourceLayer: 'transportation' });
+  const segs = [];
+  for (const f of feats) {
+    const p = f.properties;
+    if (!R3_DRIVABLE.has(p.class)) continue;
+    const li = LANES.BY_CLASS[p.class] || [1, 1];
+    const lanes2 = p.ramp === 1 ? LANES.RAMP_LANES : (p.oneway === 1 ? li[0] : li[1] * 2);
+    const halfW = (lanes2 * LANES.LANE_WIDTH_M) / 2 + LANES.SHOULDER_M + LANES.TREE_SHOULDER_M;
+    const lines = f.geometry.type === 'LineString' ? [f.geometry.coordinates]
+      : f.geometry.type === 'MultiLineString' ? f.geometry.coordinates : [];
+    for (const pts of lines) {
+      if (!pts.some((q2) => metersBetween(q2[0], q2[1], car.lng, car.lat) < 1400)) continue;
+      let prevP = null;
+      for (const pt of pts) {
+        const sp = toScene(pt[0], pt[1], 0);
+        if (prevP) segs.push({ ax: prevP.x, az: prevP.z, bx: sp.x, bz: sp.z, halfW });
+        prevP = sp;
+      }
+    }
+  }
+  if (!segs.length) return;
+
+  const carP = toScene(car.lng, car.lat, 0);
+  let changed = false;
+  trees.forEach((t, i) => {
+    if (treeCull.checked.has(i)) return;
+    if (Math.hypot(t.x - carP.x, t.z - carP.z) > 1300) return; // not loaded yet
+    treeCull.checked.add(i);
+    for (const s of segs) {
+      const abx = s.bx - s.ax, abz = s.bz - s.az;
+      const len2 = abx * abx + abz * abz;
+      let tt = len2 > 0 ? ((t.x - s.ax) * abx + (t.z - s.az) * abz) / len2 : 0;
+      tt = Math.max(0, Math.min(1, tt));
+      const dx = t.x - (s.ax + abx * tt), dz = t.z - (s.az + abz * tt);
+      if (dx * dx + dz * dz < s.halfW * s.halfW) {
+        treeCull.culled.add(i);
+        matrix.makeScale(0, 0, 0);
+        trunks.setMatrixAt(i, matrix);
+        changed = true;
+        break;
+      }
+    }
+  });
+  if (changed) {
+    trunks.instanceMatrix.needsUpdate = true;
+    rebuildTreeLobes(); // canopies follow the cull set
+  }
+  window.__treeCull = { checked: treeCull.checked.size, culled: treeCull.culled.size,
+                        margin: treeCull.margin };
 }
 
 // Lay out every canopy lobe from LOOK's tree knobs. Lobe 0 is the crown
@@ -2246,8 +2343,16 @@ function rebuildTreeLobes() {
   // undersides show from EVERY angle, not just from above.
   const heights = new Float32Array(trees.length * L);
   let idx = 0;
-  for (const t of trees) {
+  for (let ti = 0; ti < trees.length; ti++) {
+    const t = trees[ti];
+    const culled = treeCull.culled.has(ti); // road-blocking trees vanish
     for (let j = 0; j < L; j++) {
+      if (culled) {
+        matrix.makeScale(0, 0, 0);
+        heights[idx] = 0;
+        mesh.setMatrixAt(idx++, matrix);
+        continue;
+      }
       let yOff;
       if (j === 0) {
         // The crown: biggest lobe, sits highest, stretched by shapeV.
@@ -3369,6 +3474,7 @@ function tick(now) {
   checkDelivery();
   if (!SHOT) updateTraffic(dt, now); // traffic is random — skip it in shot mode
   refreshRoad3D(now);
+  validateTrees(now);
   rebuildShadows(now);
   updateChaseCamera(dt);
   updateHUD();
