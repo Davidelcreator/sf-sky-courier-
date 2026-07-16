@@ -1285,7 +1285,11 @@ function bridgeDeckHeightAt(lng, lat) {
       if (best === null || h > best) best = h;
     }
   }
-  return best;
+  // The deck SLAB is 3 m thick and centred on the deck height, so its
+  // drivable TOP surface is 1.5 m higher. Without this the car clamps to
+  // the centreline and rides half-buried inside the slab (invisible with
+  // the old oversized car, obvious at realistic scale).
+  return best === null ? null : best + 1.5;
 }
 
 // Closest point (horizontally) on a deck polyline to a target scene
@@ -1556,8 +1560,10 @@ function refreshRoad3D(nowMs) {
           quad(prev.tr, prev.rr, cur.rr, cur.tr); // right rail
         }
         segs.push({
-          aLng: samples[i - 1][0], aLat: samples[i - 1][1], aH: prevH,
-          bLng: samples[i][0], bLat: samples[i][1], bH: h, halfW,
+          // +0.35 = the ribbon's visible top surface (see toScene above),
+          // so the car rides ON the asphalt, not sunk into it.
+          aLng: samples[i - 1][0], aLat: samples[i - 1][1], aH: prevH + 0.35,
+          bLng: samples[i][0], bLat: samples[i][1], bH: h + 0.35, halfW,
         });
         // Pillars under high spans.
         if (w.kind === 'bridge') {
@@ -2422,7 +2428,8 @@ function updateTraffic(dt, nowMs) {
     const r3H = deckH === null ? road3DHeightAt(dLng, dLat) : null;
     const y = deckH !== null ? deckH
       : r3H !== null ? r3H : Math.max(0, groundAt(dLng, dLat, 0));
-    const p = toScene(dLng, dLat, y + 1);
+    // +0.6 = half the traffic box height, so wheels sit ON the surface.
+    const p = toScene(dLng, dLat, y + 0.6);
     c.mesh.position.copy(p);
     const dx = (b[0] - a[0]) * Math.cos(lat * DEG);
     const dy = b[1] - a[1];
