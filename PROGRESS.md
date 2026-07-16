@@ -60,3 +60,9 @@ Every step: change → `npm run shot` (launch check + capture) → judge vs
 | T2 facade variety | 3 generated window patterns (office/wide/tall) assigned per id+height hash — neighbouring facades differ like ref2. FPS 42.6. | tex_facades.png |
 | T3 lanes | Audit: tiles carry NO lanes tag (schema) → class+oneway default table IS the pipeline (LANES config, P-slider-able). ROADS3D ribbons: lane-count widths + emitted markings (dashed white dividers, solid yellow centre on 2-way, position-hashed asphalt luminance jitter); hand decks: instanced dash strips (6 lanes w/ median); vector streets: meter-true widths by class + 4 marking line layers. Car spans one lane on the GG deck. FPS 42.3 (== pre-lanes), 59.8 on deck. | LANES.md, lanes_ggdeck.png, lanes_embarcadero.png, lanes_columbus.png |
 | T4 trees | Runtime placement validation: any tree within a road's REAL width (lane table) + TREE_SHOULDER_M (2m, P-slider) is culled; decisions cached per tree, margin change restores + revalidates. Culls measured per area: GG Park east 4/191, Marina Green 2/44, Presidio 12/120, GG Park west 11/200 (~5% — density stays). Park roads render clear (JFK / MLK / Marina Blvd shots); bushes not yet validated (positions not retained at build — logged). | trees_jfk.png, trees_mlk.png, trees_marina.png |
+
+## Textures/lanes/trees wrap-up
+- Play mode boots clean (zero page errors). FPS floor verified relatively:
+  final A/B baseline 42.3 vs current 41.5 (delta within noise; a lone 35.2
+  reading was machine drift, disproven by the same-batch baseline).
+- Comparison strips: shots/tex_ferry_compare.png, tex_palace_compare.png.

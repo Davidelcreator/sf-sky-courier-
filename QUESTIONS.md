@@ -28,3 +28,14 @@ into three.js.
   the data doesn't have).
 - Deck ribbons are box strips without lane markings for now — the lane
   stripe is a possible cheap follow-up.
+
+## Textures/lanes/trees job (feature/textures-lanes)
+- Landmark GEOMETRY not attempted (stop line): making the Ferry Building's
+  arcade truly arched or the Palace rotunda round-with-columns needs new
+  meshes — the texture/recolor treatment gets the tone and rhythm only.
+  Option logged: hand-model both as glTF assets (would also need import
+  approval).
+- Bushes are not road-validated yet: their positions aren't retained at
+  build time (only matrices). Retaining them costs a small array; do it
+  if bushes-in-roads gets reported.
+- Traffic still drives road centrelines rather than a specific lane.
