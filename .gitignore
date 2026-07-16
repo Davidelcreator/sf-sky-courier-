@@ -10,3 +10,4 @@ ref/
 
 # capture-script output (regenerate with: npm run shot)
 shots/
+ref2/
