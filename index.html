@@ -85,14 +85,17 @@
       <div id="joystick">
         <div id="joystick-knob"></div>
       </div>
-      <!-- Right: tap CAM to change camera, MODE to switch hover/glide,
-           hold FLY to thrust. -->
+      <!-- Right: tap CAM to change camera, MODE to switch hover/glide;
+           the second joystick below is FLIGHT — push up to thrust
+           skyward (half push = half thrust), pull down to dive. -->
       <div id="touch-right">
         <button class="tbtn" id="btn-map">&#128506; MAP</button>
         <button class="tbtn" id="btn-veh">&#128760; VEH</button>
         <button class="tbtn" id="btn-cam">&#127909; CAM</button>
         <button class="tbtn" id="btn-mode">MODE</button>
-        <button class="tbtn" id="btn-fly">FLY</button>
+        <div id="joystick-fly">
+          <div id="joystick-fly-knob"></div>
+        </div>
       </div>
     </div>
   </div>

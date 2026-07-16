@@ -33,7 +33,8 @@ cars drive the real streets as traffic.
 
 On phones and tablets, on-screen controls appear automatically: a
 joystick on the left (push to steer, and up/down to accelerate/brake)
-and a **FLY** button on the right.
+and a **flight joystick** on the right — push up to thrust skyward
+(half push = half thrust), pull down to dive.
 
 ## Run it locally
 

@@ -787,12 +787,18 @@ window.game.keys = keys;
 // positive). The keyboard sets full-tilt values instead.
 const joystick = { x: 0, y: 0 };
 
+// Second joystick (right thumb): FLIGHT. Push up = thrust skyward
+// (analog — half push, half thrust), pull down = push the nose down for
+// a quick descent. Replaces the old all-or-nothing FLY button.
+const joystickFly = { x: 0, y: 0 };
+
 // The COMBINED control input, recomputed each physics step from
-// keyboard + joystick. steer/throttle are -1..1. Keeping the final
+// keyboard + joystick. steer/throttle/fly are -1..1. Keeping the final
 // input in one object lets both the physics and the car's cosmetic
 // tilt read the exact same numbers.
-const input = { steer: 0, throttle: 0 };
+const input = { steer: 0, throttle: 0, fly: 0 };
 window.game.joystick = joystick;
+window.game.joystickFly = joystickFly;
 window.game.input = input;
 // Debug hook: lets you single-step the physics from the console, e.g.
 // `game.step(0.1)` advances the world 0.1s. (The game normally calls
@@ -830,6 +836,7 @@ window.addEventListener('keyup', (e) => {
 // events cover mouse, finger and pen with one unified API.
 function bindHoldButton(id, action) {
   const el = document.getElementById(id);
+  if (!el) return; // control replaced/removed in the HTML
   const press = (e) => { e.preventDefault(); keys[action] = true; };
   const release = (e) => { e.preventDefault(); keys[action] = false; };
   el.addEventListener('pointerdown', press);
@@ -838,16 +845,20 @@ function bindHoldButton(id, action) {
   el.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
+// (The old FLY hold-button was replaced by the fly joystick; the binding
+// stays harmless if the button ever comes back.)
 bindHoldButton('btn-fly', 'thrust');
 
-// The analog joystick. We track one finger from where it presses the
+// An analog joystick. We track one finger from where it presses the
 // ring, follow it as it drags (even outside the ring), and turn its
-// offset from center into two -1..1 values. setPointerCapture keeps the
-// drag glued to this element even when the finger slides past its edge.
-function setupJoystick() {
-  const base = document.getElementById('joystick');
-  const knob = document.getElementById('joystick-knob');
-  const MAX = 46;      // how far (pixels) the knob can travel from center
+// offset from center into two -1..1 values written into `out`.
+// setPointerCapture keeps the drag glued to this element even when the
+// finger slides past its edge. lockX = vertical-only (the fly stick).
+function setupJoystick(baseId, knobId, out, lockX = false) {
+  const base = document.getElementById(baseId);
+  const knob = document.getElementById(knobId);
+  if (!base || !knob) return;
+  const MAX = base.clientWidth ? base.clientWidth * 0.38 : 46; // knob travel px
   const DEAD = 0.16;   // ignore tiny wobbles near the middle (a "dead zone")
   let pointerId = null;
 
@@ -860,21 +871,21 @@ function setupJoystick() {
 
   const moveTo = (e) => {
     const r = base.getBoundingClientRect();
-    let dx = e.clientX - (r.left + r.width / 2);
+    let dx = lockX ? 0 : e.clientX - (r.left + r.width / 2);
     let dy = e.clientY - (r.top + r.height / 2);
     // Keep the knob inside the ring.
     const dist = Math.hypot(dx, dy);
     if (dist > MAX) { dx = (dx / dist) * MAX; dy = (dy / dist) * MAX; }
     knob.style.transform = `translate(${dx}px, ${dy}px)`;
-    joystick.x = withDeadzone(dx / MAX);
-    joystick.y = withDeadzone(-dy / MAX); // screen y grows downward; flip it
+    out.x = withDeadzone(dx / MAX);
+    out.y = withDeadzone(-dy / MAX); // screen y grows downward; flip it
   };
 
   const end = (e) => {
     if (e.pointerId !== pointerId) return;
     pointerId = null;
-    joystick.x = 0;
-    joystick.y = 0;
+    out.x = 0;
+    out.y = 0;
     knob.style.transform = 'translate(0px, 0px)'; // snap knob home
   };
 
@@ -890,7 +901,8 @@ function setupJoystick() {
   base.addEventListener('pointerup', end);
   base.addEventListener('pointercancel', end);
 }
-setupJoystick();
+setupJoystick('joystick', 'joystick-knob', joystick);
+setupJoystick('joystick-fly', 'joystick-fly-knob', joystickFly, true);
 
 // Only show the touch controls on devices that actually have a touch screen.
 if (navigator.maxTouchPoints > 0) {
@@ -2890,7 +2902,7 @@ function updateSceneObjects(timeSeconds) {
   three.carBody.rotation.z += (targetRoll - three.carBody.rotation.z) * 0.15;
 
   // Thrusters stretch while boosting.
-  const podStretch = keys.thrust ? 1.9 : 1;
+  const podStretch = input.fly > 0.05 ? 1.9 : 1;
   for (const pod of three.thrusters) {
     pod.scale.y += (podStretch - pod.scale.y) * 0.2;
   }
@@ -2899,7 +2911,7 @@ function updateSceneObjects(timeSeconds) {
   if (three.ufoModel && three.ufoModel.visible) {
     three.ufoRim.rotation.y = timeSeconds * 2.2;
     three.ufoGlow.material.opacity =
-      keys.thrust ? 0.75 : 0.3 + 0.1 * Math.sin(timeSeconds * 4);
+      input.fly > 0.05 ? 0.75 : 0.3 + 0.1 * Math.sin(timeSeconds * 4);
   }
 
   // --- Shadow: on the ground (wherever the terrain puts it), fading
@@ -2952,6 +2964,9 @@ function updatePhysics(dt) {
   const clamp1 = (v) => Math.max(-1, Math.min(1, v));
   input.steer = clamp1((keys.right ? 1 : 0) - (keys.left ? 1 : 0) + joystick.x);
   input.throttle = clamp1((keys.forward ? 1 : 0) - (keys.back ? 1 : 0) + joystick.y);
+  // Flight: SPACE gives full thrust; the fly joystick gives analog
+  // thrust up (positive) or a downward push (negative) for fast descents.
+  input.fly = clamp1((keys.thrust ? 1 : 0) + joystickFly.y);
 
   // --- Steering ---
   const horizSpeed = Math.hypot(car.vx, car.vy);
@@ -3009,7 +3024,11 @@ function updatePhysics(dt) {
   car.vy = fwdN * fwdSpeed + sideN * sideSpeed;
 
   // --- Vertical: thrust vs gravity vs drag ---
-  if (keys.thrust) car.vAlt += phys.THRUST * dt;
+  // Analog: a half-pushed fly stick gives half thrust. Pulled DOWN it
+  // pushes the car toward the ground (60% strength, only while airborne)
+  // so you can dive to a delivery instead of waiting on gravity.
+  if (input.fly > 0) car.vAlt += phys.THRUST * input.fly * dt;
+  else if (input.fly < 0 && !onGround) car.vAlt += phys.THRUST * 0.6 * input.fly * dt;
 
   // In GLIDE mode, forward speed makes lift (like wings) that cancels
   // part of gravity. min() caps the lift: gliding always sinks a
