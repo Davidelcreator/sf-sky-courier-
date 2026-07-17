@@ -814,7 +814,9 @@ const state = {
   targetIndex: 0,       // which BEACONS entry we're delivering to
   camHeading: START.heading, // camera direction (lags behind the car)
   flightMode: 'hover',  // 'hover' (thrust vs gravity) or 'glide' (wings!)
-  cameraMode: 0,        // which CAMERA.MODES preset is active
+  // which CAMERA.MODES preset is active — starts on CAMERA.DEFAULT_MODE
+  // (falls back to the first mode if the name isn't found)
+  cameraMode: Math.max(0, CAMERA.MODES.findIndex((m) => m.name === CAMERA.DEFAULT_MODE)),
   camZoom: CAMERA.MODES[0].zoom,   // current zoom/pitch — these chase the
   camPitch: CAMERA.MODES[0].pitch, // preset's values smoothly, no hard cuts
   zoomNudge: 0,         // extra zoom from the mouse wheel, -1..1

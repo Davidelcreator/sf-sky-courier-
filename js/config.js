@@ -144,6 +144,7 @@ export const VEHICLES = [
 export const CAMERA = {
   SMOOTH: 4,    // how quickly the camera swings around when you turn.
                 // Bigger = snappier, smaller = lazier.
+  DEFAULT_MODE: 'CLOSE', // the camera the game starts with (any name below)
   MODES: [
     { name: '3RD PERSON', zoom: 18.9, pitch: 60 }, // close behind, over the shoulder
     { name: 'CHASE',    zoom: 17.3, pitch: 72 },  // the classic
