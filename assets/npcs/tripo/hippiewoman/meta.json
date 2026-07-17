@@ -1,0 +1,9 @@
+{
+  "name": "hippiewoman",
+  "prompt": "Low poly stylized 3D female character, early 30s woman, long messy wavy brown hair with flower crown and beads, round glasses, smug peaceful expression. Wearing colorful tie-dye shirt, long skirt, sandals, multiple necklaces and bracelets. Granola hippie style. Game ready, low poly, clean topology, stylized proportions, big head for readability, exaggerated features, vibrant colors.",
+  "generated": "2026-07-17T09:55:00Z",
+  "tasks": {
+    "generate": "f1611a70-b571-4738-9946-b8b283a74a27",
+    "rig_error": "blocked on empty wallet 2026-07-17 — rerun rig/retarget against the generate task id above (no regeneration needed). Generated WITH face_limit 15000 (1.2 MB)."
+  }
+}

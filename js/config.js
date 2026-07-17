@@ -52,7 +52,8 @@ export const RECIPIENTS = [
     //   (found with the in-game collision data — the wharf's beige "plazas"
     //   are mostly big flat ROOFS, which fooled three placements first)
   { id: 'hippiewoman', name: 'the Berkeley Hippie',
-    lngLat: [-122.2592, 37.8659], heading: -1.2 },     // Telegraph & Haste, Berkeley
+    lngLat: [-122.259337, 37.866008], heading: -1.2 }, // Haste St nr Telegraph, Berkeley
+    // ^ open-ground verified with the collision data, like the captain
 ];
 
 // Physics constants. Units are meters and seconds (m/s, m/s²).

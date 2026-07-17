@@ -114,6 +114,10 @@ function req(method, url, headers, body) {
   const dir = path.join(OUT_ROOT, name);
   fs.mkdirSync(dir, { recursive: true });
   const meta = { name, prompt, generated: new Date().toISOString(), tasks: {} };
+  // Save after every step — a failure halfway (empty wallet, say) must
+  // not lose the task ids we already paid for.
+  const saveMeta = () => fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 2));
+  process.on('exit', saveMeta);
 
   // ---- 1. text → model ----
   // face_limit keeps the mesh game-sized: the first unlimited run came

@@ -1,0 +1,9 @@
+{
+  "name": "captain",
+  "prompt": "Low poly stylized 3D character, elderly sea captain, 60 years old, thick white beard and mustache, weathered face, wearing a dark captain's hat with anchor emblem, navy peacoat, white shirt, boots. Red parrot perched on his left shoulder. Standing pose, confident expression. Game ready, low poly, clean topology, stylized proportions, big head for readability.",
+  "generated": "2026-07-17T08:43:00Z",
+  "tasks": {
+    "generate": "c021c8d7-0fde-4b60-90f3-bdc985ecef8e",
+    "rig_error": "blocked on empty wallet 2026-07-17 — rerun rig/retarget against the generate task id above (no regeneration needed). NOTE: generated without face_limit (501k tris) — also run a low-poly convert."
+  }
+}
