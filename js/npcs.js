@@ -409,6 +409,26 @@ function inRoadway(x, z, margin) {
   return false;
 }
 
+// The median trap: big boulevards (the Embarcadero, Van Ness…) are mapped
+// as TWO one-way roads. A "sidewalk" on the inner side of one of them is
+// really the median strip — legal by the roadway test, but it LOOKS like
+// standing in the middle of the street. Detect: some OTHER roadway edge
+// is close by (own road sits at exactly `ownDist`, so it's excluded even
+// when tiles hand us duplicate copies of it).
+function medianTrap(x, z, ownDist) {
+  for (const s of N.segs) {
+    const abx = s.bx - s.ax, abz = s.bz - s.az;
+    const len2 = abx * abx + abz * abz;
+    let t = len2 > 0 ? ((x - s.ax) * abx + (z - s.az) * abz) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const dx = x - (s.ax + abx * t), dz = z - (s.az + abz * t);
+    const d = Math.hypot(dx, dz);
+    if (Math.abs(d - ownDist) <= 0.7) continue;   // that's us (or our tile-twin)
+    if (d - s.halfW < 1.8) return true;           // someone else's roadway, close
+  }
+  return false;
+}
+
 // ------------------------------------------------------------
 // Spawning
 // ------------------------------------------------------------
@@ -459,13 +479,23 @@ function trySpawnOne(nowMs) {
   const car = ctx.getCar();
   const path = N.paths[Math.floor(N.rand() * N.paths.length)];
   const seg = Math.floor(N.rand() * (path.pts.length - 1));
-  const offset = path.halfW + NPCS.SIDEWALK_M * (0.6 + N.rand() * 0.9);
+  const offset = path.halfW + NPCS.SIDEWALK_M * (0.8 + N.rand() * 0.8);
   const npc = {
     path, seg, segT: N.rand(), side: N.rand() < 0.5 ? -1 : 1,
     offset, baseOffset: offset,
     dir: N.rand() < 0.5 ? -1 : 1,
   };
-  pathPoint(npc, scratch);
+
+  // Try the rolled side; if that spot is in the median of a divided
+  // boulevard (or hugs some other road), try the other side instead.
+  let sp = null;
+  for (let flip = 0; flip < 2; flip++) {
+    pathPoint(npc, scratch);
+    sp = ctx.toScene(scratch.lng, scratch.lat, 0);
+    if (!medianTrap(sp.x, sp.z, npc.offset)) break;
+    npc.side *= -1;
+    if (flip === 1) return false; // boxed in on both sides — bad spot
+  }
 
   const dCar = ctx.metersBetween(scratch.lng, scratch.lat, car.lng, car.lat);
   if (dCar < NPCS.SPAWN_MIN_M || dCar > NPCS.SPAWN_RADIUS_M) return false;
@@ -474,7 +504,6 @@ function trySpawnOne(nowMs) {
   if (ctx.groundAt(scratch.lng, scratch.lat, 0) < -0.5) return false;
   // never in ANY roadway (a sidewalk spot can still fall inside a nearby
   // crossing street — same trap the trees fell into)
-  const sp = ctx.toScene(scratch.lng, scratch.lat, 0);
   if (inRoadway(sp.x, sp.z, 0.4)) return false;
 
   const district = districtAt(scratch.lng, scratch.lat);
