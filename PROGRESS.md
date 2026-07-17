@@ -78,3 +78,12 @@ Every step: change → `npm run shot` (launch check + capture) → judge vs
 | Behavior | wander along road edges, idle, archetype flavor anims, vehicle-scare react (step back + emote when a moving vehicle enters 9 m) — verified end to end headless. No ragdolls, no NPC-vehicle damage (per contract) | headless react run |
 | NPC count vs FPS | tools/fps.js A/B (real GPU RX 5700 XT, q=high, downtown cam, 3 alternating rounds): **0 NPCs 42.1 / 24 NPCs 40.3 / 40 NPCs 38.3 / 60 NPCs 36.9 avg fps** ≈ 0.09 fps per NPC. Caps set to hold the 40 floor: high 24, medium 16, low 8. NPCS.DENSITY dial (P panel) scales them; ?npcmax=N overrides for testing | this table |
 | Server fix | the "dev server dies silently" mystery: client aborts (headless Chrome closing mid-download) raised unhandled stream errors that killed node. server.js now survives them | server.js |
+
+## AI characters + character deliveries (feature/tripo-chars)
+| Item | Result | Evidence |
+|---|---|---|
+| Pipeline | tools/tripo_chars.js: description → Tripo text_to_model → auto-rig → preset walk/idle retarget → GLB. One character per run (real money); key read from the Spectrum project's gitignored secrets, never this repo; meta.json keeps task ids so paid steps are never repeated | 2 characters generated |
+| Characters | Sea Captain (parrot on shoulder, 501k tris — pre-face_limit) and Berkeley Hippie (flower crown, 1.2 MB with face_limit 15000). Both generated from David's descriptions; rig+animations BLOCKED on empty Tripo wallet — task ids saved for the top-up | shots/tripo_captain_front.png, npc lineup comparisons |
+| Deliveries | RECIPIENTS in config join the route after the landmark BEACONS: beacon lands ON the character (verified: beacon pos == holder pos to the decimeter), HUD names them, "DELIVERED to the Sea Captain!" | beacon probe run |
+| Placement | both spots verified open ground via the game's own collision + roadway data after the wharf's rooftop "plazas" fooled three eyeballed placements — spotfinder grid probe is the honest tool | shots/recipient_captain9.png |
+| Loading | recipient models lazy-load at 2.5 km so the 15 MB captain costs nothing until you visit the wharf | js/npcs.js updateRecipients |
