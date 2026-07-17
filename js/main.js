@@ -334,20 +334,78 @@ function initGame() {
       const id = baseId.replace('road', prefix);
       const casing = id + '_casing';
       try {
-        if (map.getLayer(id)) map.setPaintProperty(id, 'line-width', mWidth(metersExpr));
+        if (map.getLayer(id)) {
+          map.setPaintProperty(id, 'line-width', mWidth(metersExpr));
+          // Asphalt, not the style's cartoon yellow/white — so vector
+          // streets match the 3D decks (GG bridge, viaducts, ramps).
+          map.setPaintProperty(id, 'line-color',
+            prefix === 'tunnel' ? LANES.ASPHALT_TUNNEL : LANES.ASPHALT);
+        }
         if (map.getLayer(casing)) {
           map.setPaintProperty(casing, 'line-width',
             mWidth(typeof metersExpr === 'number' ? metersExpr + 1.2 : ['+', metersExpr, 1.2]));
+          // ...and the bright orange outline becomes a thin dark curb.
+          map.setPaintProperty(casing, 'line-color', LANES.CASING);
         }
       } catch (e) { /* style variant without this layer */ }
     }
+  }
+  // The style also misses a fill+width pass on two odd ones out:
+  // road_minor has its own casing not in ROAD_WIDTHS' loop above (it IS
+  // covered — road_minor maps from road_minor), and pedestrian paths.
+  // Footpaths become light concrete strips ~2 m wide — which doubles as
+  // a visual hint of where the sidewalk NPCs are allowed to be.
+  for (const prefix of ['road', 'tunnel']) {
+    const id = prefix + '_path_pedestrian';
+    try {
+      if (map.getLayer(id)) {
+        map.setPaintProperty(id, 'line-color', LANES.PATH);
+        map.setPaintProperty(id, 'line-width', mWidth(2));
+        map.setPaintProperty(id, 'line-dasharray', null); // solid, not dotted
+      }
+    } catch (e) { /* fine */ }
+  }
+
+  // --- Sidewalk strips ---
+  // Light concrete bands along both edges of every walkable street —
+  // exactly the strip (road edge + 0–3 m) the pedestrian NPCs walk, so
+  // people visibly stand on a sidewalk instead of hovering over the
+  // photo's dark pavement. Same lane tables as everything else.
+  const walkable = ['in', ['get', 'class'],
+    ['literal', ['primary', 'secondary', 'tertiary', 'minor', 'street', 'residential']]];
+  // half road width by class/oneway (meters), matching ROAD_WIDTHS above
+  const halfWExpr = ['case',
+    ['==', ['get', 'class'], 'primary'], ['case', isOneway, (3 * lw + sh) / 2, (4 * lw + sh) / 2],
+    ['in', ['get', 'class'], ['literal', ['secondary', 'tertiary']]], (2 * lw + sh) / 2,
+    ['case', isOneway, (lw + sh) / 2, (2 * lw + sh) / 2]];
+  const SIDEWALK_W = 3; // meters — covers the whole NPC walking band
+  for (const side of [1, -1]) {
+    map.addLayer({
+      id: side > 0 ? 'sidewalk-left' : 'sidewalk-right',
+      type: 'line', source: buildingSourceId,
+      'source-layer': 'transportation', minzoom: 15,
+      filter: ['all', walkable, ['!=', ['coalesce', ['get', 'brunnel'], ''], 'tunnel'],
+               ['!=', ['coalesce', ['get', 'ramp'], 0], 1]],
+      paint: {
+        'line-color': LANES.PATH,
+        'line-opacity': 0.85,
+        'line-width': mWidth(SIDEWALK_W),
+        'line-offset': mWidth(['*', side, ['+', halfWExpr, SIDEWALK_W / 2]]),
+      },
+    }, firstSymbolId);
   }
 
   // Painted markings as thin offset line layers (minzoom-gated).
   // Dasharray units are multiples of line-width, so dashes stay
   // proportional at every zoom for free.
   const mB255 = Math.round(LANES.MARKING_BRIGHTNESS * 255);
-  const markWidth = ['max', 0.7, mWidth(0.15)];
+  // A 0.15 m paint stripe, clamped to at least 0.7 px so it stays visible
+  // when zoomed out. NOTE: the clamp must be baked into the stops — an
+  // interpolate wrapped in ['max', …] is rejected by MapLibre ("zoom may
+  // only be used at top level"), which silently reverted markings to
+  // 1 px hairlines before this fix.
+  const markWidth = ['interpolate', ['linear'], ['zoom'],
+    18, 0.7, 19, 0.15 / mpp(19), 20, 0.15 / mpp(20), 22, 0.15 / mpp(22)];
   const laneMarkLayers = [
     { id: 'lane-yellow-center', // two-way majors: solid yellow centreline
       filter: ['all', ['in', ['get', 'class'], ['literal', ['trunk', 'primary', 'secondary', 'tertiary']]],
@@ -367,7 +425,9 @@ function initGame() {
       filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]],
       paint: { 'line-color': `rgba(${mB255},${mB255},${mB255},0.8)`,
                'line-width': markWidth, 'line-dasharray': [20, 40],
-               'line-offset': ['*', -1, mWidth(LANES.LANE_WIDTH_M)] } },
+               // negate the METERS, not the expression — ['*', -1, interpolate]
+               // is rejected the same way as the markWidth note above
+               'line-offset': mWidth(-LANES.LANE_WIDTH_M) } },
   ];
   for (const spec of laneMarkLayers) {
     map.addLayer({

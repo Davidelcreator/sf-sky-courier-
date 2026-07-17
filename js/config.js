@@ -347,6 +347,14 @@ export const LANES = {
   // Trees may not stand in the roadway: any tree within a road's real
   // width (from the lane table) PLUS this shoulder margin gets culled.
   TREE_SHOULDER_M: 2,
+
+  // Road surface colors. The map style ships cartoony yellow/white
+  // roads with orange outlines; we repaint them as asphalt so every
+  // street matches the 3D decks (Golden Gate, viaducts, ramps).
+  ASPHALT: '#33363b',        // street surface
+  ASPHALT_TUNNEL: '#26282c', // tunnel corridors read a step darker
+  CASING: '#232529',         // thin dark curb edge (was bright orange)
+  PATH: '#a7a5a0',           // footpaths/sidewalk lines: light concrete
 };
 
 export const ROADS3D = {
