@@ -34,6 +34,27 @@ export const BEACONS = [
   { name: 'Transamerica Pyramid',  lngLat: [-122.4028, 37.7952] },
 ];
 
+// ============================================================
+// RECIPIENTS — special characters who personally receive packages
+// ============================================================
+// Each one is an AI-generated character (assets/npcs/tripo/<id>/) who
+// stands at a fixed spot and joins the delivery route after the
+// landmark BEACONS above — fly to THEM and drop the package.
+//   id      — folder name under assets/npcs/tripo/
+//   name    — shown in the HUD and the "DELIVERED to …" message
+//   lngLat  — where they stand (right-click Google Maps for coords)
+//   heading — compass radians they face (0 = north, + = clockwise)
+// Add a character: generate with tools/tripo_chars.js, then one line here.
+export const RECIPIENTS = [
+  { id: 'captain', name: 'the Sea Captain',
+    lngLat: [-122.417359, 37.808323], heading: 2.7 },  // Fisherman's Wharf, pier walkway
+    // ^ verified open ground: no building footprint, outside every roadway
+    //   (found with the in-game collision data — the wharf's beige "plazas"
+    //   are mostly big flat ROOFS, which fooled three placements first)
+  { id: 'hippiewoman', name: 'the Berkeley Hippie',
+    lngLat: [-122.2592, 37.8659], heading: -1.2 },     // Telegraph & Haste, Berkeley
+];
+
 // Physics constants. Units are meters and seconds (m/s, m/s²).
 // These are "arcade" values — a real car can't do any of this.
 export const PHYSICS = {

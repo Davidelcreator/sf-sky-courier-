@@ -19,6 +19,15 @@ Third-party assets used by SF Sky Courier, with exact sources and licenses.
   <https://creativecommons.org/publicdomain/zero/1.0/>.
   No attribution required; credited here anyway. Support: kenney.nl/donate.
 
+## AI-generated characters (Tripo3D)
+
+- **What:** unique delivery-recipient characters under `assets/npcs/tripo/`
+  (currently: the Sea Captain, the Berkeley Hippie), generated from David's
+  text descriptions with the Tripo3D API (tools/tripo_chars.js; task ids in
+  each character's `meta.json`).
+- **License:** generated on David's paid Tripo account — per Tripo's terms,
+  paid-plan outputs belong to the customer, commercial use included.
+
 ## Everything else
 
 All other models (player vehicles, bridges, trees, NPC props like

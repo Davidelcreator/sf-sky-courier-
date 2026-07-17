@@ -23,7 +23,7 @@ import { clone as cloneSkeleton } from 'https://unpkg.com/three@0.160.0/examples
 // Loaded with the same cache-busting version as main.js (see the note
 // there) so a deploy can never mix old and new halves of the game.
 const V = new URL(import.meta.url).search;
-const { NPCS, NPC_ARCHETYPES, DISTRICTS, TREE_SPOTS, LANES } =
+const { NPCS, NPC_ARCHETYPES, DISTRICTS, TREE_SPOTS, LANES, RECIPIENTS } =
   await import('./config.js' + V);
 
 const DEG = Math.PI / 180;
@@ -708,6 +708,66 @@ function updateNPC(npc, dt, nowMs) {
 }
 
 // ------------------------------------------------------------
+// Delivery recipients — the AI-generated characters (RECIPIENTS in
+// config.js) who stand at their posts and personally receive packages.
+// Their models are heavier than crowd NPCs, so each one loads only when
+// the player first flies within LOAD_M of them, then stays.
+// ------------------------------------------------------------
+const RECIP_LOAD_M = 2500;
+
+function updateRecipients(nowMs) {
+  if (!N.recipients) return;
+  const car = ctx.getCar();
+  for (const r of N.recipients) {
+    const d = ctx.metersBetween(car.lng, car.lat, r.lngLat[0], r.lngLat[1]);
+    if (!r.state && d < RECIP_LOAD_M) {
+      r.state = 'loading';
+      loadRecipient(r); // async; flips r.state to 'ready' or 'failed'
+    }
+    // stand on the terrain (which streams in late) — re-pin once a second
+    if (r.holder && d < RECIP_LOAD_M * 2 && nowMs > (r.lastPin || 0) + 1000) {
+      r.lastPin = nowMs;
+      r.holder.position.copy(ctx.toScene(r.lngLat[0], r.lngLat[1],
+        Math.max(0, ctx.groundAt(r.lngLat[0], r.lngLat[1], 0))));
+      // Tripo models face opposite to Kenney's convention → plain -heading
+      r.holder.rotation.y = -r.heading;
+    }
+    if (r.mixer && r.state === 'ready') r.mixer.update(1 / 60);
+  }
+}
+
+async function loadRecipient(r) {
+  const base = `assets/npcs/tripo/${r.id}/${r.id}`;
+  try {
+    const gltf = await N.loadGLB(base + '_walk.glb')
+      .catch(() => N.loadGLB(base + '_idle.glb'))
+      .catch(() => N.loadGLB(base + '_rigged.glb'))
+      .catch(() => N.loadGLB(base + '_static.glb'));
+    const model = gltf.scene;
+    const bb = new THREE.Box3().setFromObject(model);
+    const h = bb.max.y - bb.min.y || 1;
+    const s = 1.8 / h;           // hero characters stand a touch taller
+    model.scale.setScalar(s);
+    model.position.y = -bb.min.y * s;
+    const holder = new THREE.Group();
+    holder.add(model);
+    holder.traverse((o) => { o.frustumCulled = false; });
+    if (gltf.animations?.length) { // once rigged versions exist: idle loop
+      r.mixer = new THREE.AnimationMixer(model);
+      const idle = THREE.AnimationClip.findByName(gltf.animations, 'idle') || gltf.animations[0];
+      r.mixer.clipAction(idle).play();
+    }
+    r.holder = holder;
+    N.group.add(holder);
+    r.state = 'ready';
+    console.log('[recipient] ready:', r.id);
+  } catch (e) {
+    r.state = 'failed';
+    console.error('[recipient] failed:', r.id, e);
+  }
+}
+
+// ------------------------------------------------------------
 // Public API
 // ------------------------------------------------------------
 export async function initNPCs(context) {
@@ -730,6 +790,9 @@ export async function initNPCs(context) {
   // Load the baked recolor data + every character + the two pack props.
   const loader = new GLTFLoader();
   const loadGLB = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
+  N.loadGLB = loadGLB; // the recipient loader reuses it
+  // package recipients (loaded lazily by updateRecipients as you approach)
+  N.recipients = RECIPIENTS.map((r) => ({ ...r }));
   const dataP = fetch('assets/npcs/npc-data.json').then((r) => r.json());
 
   const charNames = [
@@ -802,7 +865,10 @@ export async function initNPCs(context) {
       const hx = Math.sin(car.heading), hy = Math.cos(car.heading);
       const lng = car.lng + ((hx * aheadM + hy * sideM) / (METERS_PER_DEG_LAT * Math.cos(car.lat * DEG)));
       const lat = car.lat + ((hy * aheadM - hx * sideM) / METERS_PER_DEG_LAT);
-      N.tripoTest = { holder, lng, lat, yaw: -car.heading + 0.5 };
+      // Tripo models face the opposite way from our lineup convention —
+      // the +π turns him toward the camera. &tripoyaw=<radians> adjusts.
+      const extraYaw = parseFloat(q.get('tripoyaw') ?? '0') || 0;
+      N.tripoTest = { holder, lng, lat, yaw: -car.heading + 0.5 + Math.PI + extraYaw };
       if (gltf.animations?.length) { // hold a mid-walk pose like the others
         const mixer = new THREE.AnimationMixer(model);
         mixer.clipAction(gltf.animations[0]).play();
@@ -816,6 +882,7 @@ export async function initNPCs(context) {
   }
 
   N.inRoadway = inRoadway; // exposed for the acceptance tests
+  N.ctx = ctx;             // ...and the world-query helpers with it
   window.game && (window.game.npcs = N); // console peek
   return N.group;
 }
@@ -861,6 +928,7 @@ function buildShotLineup() {
 export function updateNPCs(dt, nowMs) {
   if (!N.chars || !NPCS.ENABLED) return;
   N.frame++;
+  updateRecipients(nowMs); // package characters exist in every mode
   if (N.shot) { // lineup stays frozen for pixel-stable captures — but we
     // re-pin positions every frame: terrain height streams in AFTER load,
     // and a one-time placement would leave everyone buried or floating.

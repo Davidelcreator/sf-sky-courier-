@@ -28,8 +28,15 @@ import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders
 const V = new URL(import.meta.url).search;
 const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
         SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS, OSM_HIDE_IDS, LOOK,
-        ROADS3D, LANDMARKS, LANES, NPCS } =
+        ROADS3D, LANDMARKS, LANES, NPCS, RECIPIENTS } =
   await import('./config.js' + V);
+
+// The delivery route: every landmark beacon, then every character
+// recipient (they stand in the world — see RECIPIENTS in config.js).
+const ROUTE = [
+  ...BEACONS,
+  ...RECIPIENTS.map((r) => ({ name: r.name, lngLat: r.lngLat, recipient: r.id })),
+];
 // The pedestrian system lives in its own module (it's a small game of its
 // own: districts, archetypes, sidewalk wandering — see js/npcs.js).
 const { initNPCs, updateNPCs } = await import('./npcs.js' + V);
@@ -3024,7 +3031,7 @@ function updateSceneObjects(timeSeconds) {
   }
 
   // --- Beacon at the current target, standing on its terrain ---
-  const target = BEACONS[state.targetIndex];
+  const target = ROUTE[state.targetIndex];
   const targetGround = groundAt(target.lngLat[0], target.lngLat[1], 0);
   three.beaconGroup.position.copy(toScene(target.lngLat[0], target.lngLat[1], targetGround));
   three.beamMaterial.opacity = 0.26 + 0.1 * Math.sin(timeSeconds * 3);
@@ -3430,16 +3437,19 @@ function metersBetween(lng1, lat1, lng2, lat2) {
 }
 
 function checkDelivery() {
-  const target = BEACONS[state.targetIndex];
+  const target = ROUTE[state.targetIndex];
   const dist = metersBetween(car.lng, car.lat, target.lngLat[0], target.lngLat[1]);
 
   if (dist < GAME.DELIVERY_RADIUS && car.alt < 300) {
     state.score += GAME.POINTS;
     state.deliveries += 1;
-    flashMessage(`DELIVERED! +${GAME.POINTS}`, 1800);
-    // "% BEACONS.length" wraps back to 0 after the last one — the
+    // Character recipients get thanked by name — landmarks stay terse.
+    flashMessage(target.recipient
+      ? `DELIVERED to ${target.name}! +${GAME.POINTS}`
+      : `DELIVERED! +${GAME.POINTS}`, 1800);
+    // "% ROUTE.length" wraps back to 0 after the last one — the
     // delivery route loops forever.
-    state.targetIndex = (state.targetIndex + 1) % BEACONS.length;
+    state.targetIndex = (state.targetIndex + 1) % ROUTE.length;
   }
 }
 
@@ -3522,7 +3532,7 @@ function flashMessage(text, ms) {
 }
 
 function updateHUD() {
-  const target = BEACONS[state.targetIndex];
+  const target = ROUTE[state.targetIndex];
 
   hud.score.textContent = state.score;
   hud.packages.textContent = `\u{1F4E6} ${state.deliveries}`;
@@ -3613,7 +3623,7 @@ function startGame() {
   if (state.running) return;
   state.running = true;
   overlay.classList.add('hidden');
-  flashMessage(`Deliver to: ${BEACONS[state.targetIndex].name}`, 2500);
+  flashMessage(`Deliver to: ${ROUTE[state.targetIndex].name}`, 2500);
 }
 
 document.getElementById('start-button').addEventListener('click', startGame);
@@ -3633,6 +3643,9 @@ if (SHOT) {
   car.heading = parseFloat(q.get('heading') ?? '2.7'); // looking SE toward the Ferry Building
   car.vx = 0; car.vy = 0; car.vAlt = 0;
   if (q.get('q')) state.quality = q.get('q'); // e.g. &q=high to shoot with shadows
+  // &target=N aims the delivery beacon at route stop N (characters sit
+  // after the landmarks, so the first recipient is BEACONS.length).
+  state.targetIndex = Math.min(ROUTE.length - 1, parseInt(q.get('target') ?? '0', 10) || 0);
   state.camHeading = car.heading;
   state.cameraMode = parseInt(q.get('cam') ?? '1', 10);
   // The chase camera eases zoom/pitch toward the mode preset every frame,

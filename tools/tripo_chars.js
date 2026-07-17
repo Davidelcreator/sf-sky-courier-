@@ -116,7 +116,11 @@ function req(method, url, headers, body) {
   const meta = { name, prompt, generated: new Date().toISOString(), tasks: {} };
 
   // ---- 1. text → model ----
-  const genId = await startTask({ type: 'text_to_model', prompt }, 'generate');
+  // face_limit keeps the mesh game-sized: the first unlimited run came
+  // back at 501k triangles (693× a Kenney character). 15k is plenty for
+  // a hero character and ~40× cheaper to draw.
+  const faces = +(process.env.TRIPO_FACES || 15000);
+  const genId = await startTask({ type: 'text_to_model', prompt, face_limit: faces }, 'generate');
   meta.tasks.generate = genId;
   const genOut = await waitTask(genId, 'generate');
   const rawUrl = modelUrl(genOut);
