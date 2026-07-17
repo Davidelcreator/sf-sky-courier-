@@ -11,3 +11,7 @@ ref/
 # capture-script output (regenerate with: npm run shot)
 shots/
 ref2/
+
+# AI-generated character experiments (Tripo) — big raw GLBs stay local;
+# only optimized, shipped characters get committed deliberately.
+assets/npcs/tripo/

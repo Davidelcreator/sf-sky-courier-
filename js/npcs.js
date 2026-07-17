@@ -775,6 +775,46 @@ export async function initNPCs(context) {
   });
 
   if (N.shot) buildShotLineup();
+
+  // ?tripotest=<name> — drop an AI-generated character (from
+  // assets/npcs/tripo/<name>/) into the scene next to the lineup, so a
+  // brand-new Tripo model can be judged against the Kenney cast at true
+  // in-game scale and lighting before we commit to integrating it.
+  const tripoName = q.get('tripotest');
+  if (tripoName && /^[a-z0-9_-]+$/i.test(tripoName)) {
+    try {
+      const gltf = await loadGLB(`assets/npcs/tripo/${tripoName}/${tripoName}_walk.glb`)
+        .catch(() => loadGLB(`assets/npcs/tripo/${tripoName}/${tripoName}_rigged.glb`))
+        .catch(() => loadGLB(`assets/npcs/tripo/${tripoName}/${tripoName}_static.glb`));
+      const model = gltf.scene;
+      // normalize to NPC height, whatever scale Tripo exported at
+      const bb = new THREE.Box3().setFromObject(model);
+      const h = bb.max.y - bb.min.y || 1;
+      model.scale.setScalar(NPCS.HEIGHT_M / h);
+      model.position.y = -bb.min.y * (NPCS.HEIGHT_M / h); // feet on the ground
+      const holder = new THREE.Group();
+      holder.add(model);
+      holder.traverse((o) => { o.frustumCulled = false; });
+      const car = ctx.getCar();
+      // stands at the END of the lineup row (one slot past the last NPC)
+      const across = N.npcs.length || 8;
+      const aheadM = 12, sideM = ((across + 1) - (across - 1) / 2) * 2.2;
+      const hx = Math.sin(car.heading), hy = Math.cos(car.heading);
+      const lng = car.lng + ((hx * aheadM + hy * sideM) / (METERS_PER_DEG_LAT * Math.cos(car.lat * DEG)));
+      const lat = car.lat + ((hy * aheadM - hx * sideM) / METERS_PER_DEG_LAT);
+      N.tripoTest = { holder, lng, lat, yaw: -car.heading + 0.5 };
+      if (gltf.animations?.length) { // hold a mid-walk pose like the others
+        const mixer = new THREE.AnimationMixer(model);
+        mixer.clipAction(gltf.animations[0]).play();
+        mixer.setTime(0.45);
+      }
+      N.group.add(holder);
+      window.__tripoTestReady = true;
+      console.log('[tripotest] loaded', tripoName, 'clips:',
+        (gltf.animations || []).map((a) => a.name).join(', ') || 'none');
+    } catch (e) { console.error('[tripotest] failed:', e); }
+  }
+
   N.inRoadway = inRoadway; // exposed for the acceptance tests
   window.game && (window.game.npcs = N); // console peek
   return N.group;
@@ -829,6 +869,11 @@ export function updateNPCs(dt, nowMs) {
       npc.group.position.copy(ctx.toScene(lng, lat, Math.max(0, ctx.groundAt(lng, lat, 0))));
       npc.group.rotation.y = npc.shotYaw;
       if (npc.dogs) for (const d of npc.dogs) d.tail.rotation.z = 0.3;
+    }
+    if (N.tripoTest) { // the AI-generated guest star gets pinned too
+      const t = N.tripoTest;
+      t.holder.position.copy(ctx.toScene(t.lng, t.lat, Math.max(0, ctx.groundAt(t.lng, t.lat, 0))));
+      t.holder.rotation.y = t.yaw;
     }
     return;
   }

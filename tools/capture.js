@@ -58,6 +58,11 @@ const extraQuery = process.argv[3] || '';
     if (extraQuery.includes('npcshot')) {
       await page.waitForFunction('window.__npcShotCount > 0', { timeout: 60000 });
     }
+    // ...and for the AI-character test slot, wait for that model too
+    if (extraQuery.includes('tripotest')) {
+      await page.waitForFunction('window.__tripoTestReady === true', { timeout: 60000 });
+      await new Promise((r) => setTimeout(r, 1500)); // big texture upload settle
+    }
 
     // Small settle so label fade-ins and the last terrain meshes finish.
     await new Promise((r) => setTimeout(r, 2000));
