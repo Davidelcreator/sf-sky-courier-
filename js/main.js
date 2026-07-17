@@ -28,8 +28,11 @@ import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders
 const V = new URL(import.meta.url).search;
 const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
         SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS, OSM_HIDE_IDS, LOOK,
-        ROADS3D, LANDMARKS, LANES } =
+        ROADS3D, LANDMARKS, LANES, NPCS } =
   await import('./config.js' + V);
+// The pedestrian system lives in its own module (it's a small game of its
+// own: districts, archetypes, sidewalk wandering — see js/npcs.js).
+const { initNPCs, updateNPCs } = await import('./npcs.js' + V);
 
 // MapLibre was loaded with a plain <script> tag, so it lives on `window`.
 const maplibregl = window.maplibregl;
@@ -635,6 +638,7 @@ const LOOK_PANEL = [
   ['ln:LANE_WIDTH_M', 'Lane width m', 2.6, 4, 0.1],
   ['ln:MARKING_BRIGHTNESS', 'Marking brightness', 0.3, 1, 0.05],
   ['ln:TREE_SHOULDER_M', 'Tree shoulder margin m', 0, 8, 0.5],
+  ['np:DENSITY', 'NPC crowd density', 0, 1.5, 0.05],
 ];
 
 let lookPanelEl = null;
@@ -654,7 +658,7 @@ function toggleLookPanel() {
   for (const row of LOOK_PANEL) {
     const [rawKey, label] = row;
     // Prefixed rows edit other config objects (see LOOK_PANEL comment).
-    const PREFIXED = { 'r3:': ROADS3D, 'ln:': LANES };
+    const PREFIXED = { 'r3:': ROADS3D, 'ln:': LANES, 'np:': NPCS };
     const pref = Object.keys(PREFIXED).find((p2) => rawKey.startsWith(p2));
     const isRoad = !!pref;
     const obj = pref ? PREFIXED[pref] : LOOK;
@@ -678,11 +682,12 @@ function toggleLookPanel() {
     input.addEventListener('input', () => {
       obj[key] = isColor ? input.value : parseFloat(input.value);
       val.textContent = ' ' + obj[key];
-      if (isRoad) {
+      if (pref === 'r3:' || pref === 'ln:') {
         road3D.lastRefresh = -Infinity;         // force a road rebuild
         road3D.whiteMat = road3D.yellowMat = null; // marking brightness re-bakes
         treeCull.lastRun = -Infinity;           // and trees re-validate
-      } else applyLook();
+      } else if (!pref) applyLook();
+      // 'np:' knobs are read live by the NPC system — nothing to rebuild.
     });
     wrap.append(label + ' ', input, val);
     el.appendChild(wrap);
@@ -2839,6 +2844,32 @@ const gameLayer = {
     three.scene.add(buildTraffic());
     three.scene.add(buildShadowLayer());
 
+    // Pedestrian NPCs. initNPCs is async (it downloads the character
+    // models), so it hands back its (empty) group immediately and fills
+    // it once loading finishes — the game never waits on it.
+    initNPCs({
+      toScene, groundAt, road3DHeightAt, bridgeDeckHeightAt, buildingHeightAt,
+      metersBetween, gfx,
+      getCar: () => car,
+      getMap: () => map,
+      getSourceId: () => buildingSourceId,
+      // every moving vehicle (player + visible traffic), in scene meters —
+      // NPCs use this to flinch away from near misses
+      getVehicles: () => {
+        const list = [];
+        if (three.carGroup) {
+          list.push({ x: three.carGroup.position.x, y: three.carGroup.position.y,
+                      z: three.carGroup.position.z, speed: Math.hypot(car.vx, car.vy) });
+        }
+        for (const c of traffic.cars) {
+          if (c.mesh.visible) list.push({ x: c.mesh.position.x, y: c.mesh.position.y,
+                                          z: c.mesh.position.z, speed: TRAFFIC.SPEED });
+        }
+        return list;
+      },
+    }).then((npcGroup) => three.scene.add(npcGroup))
+      .catch((e) => console.error('NPCs failed to load:', e));
+
     // Fake drop-shadow: a dark circle on the ground under the car.
     // It fades and spreads as you climb — a surprisingly important cue
     // for judging your landing.
@@ -3492,6 +3523,7 @@ function tick(now) {
   checkCollisions(now);
   checkDelivery();
   if (!SHOT) updateTraffic(dt, now); // traffic is random — skip it in shot mode
+  updateNPCs(dt, now); // (has its own deterministic ?npcshot mode inside)
   refreshRoad3D(now);
   validateTrees(now);
   rebuildShadows(now);

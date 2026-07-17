@@ -29,9 +29,15 @@ const MIME = {
 };
 
 const server = http.createServer((request, response) => {
+  // A browser closing mid-download (headless screenshot tools do this a
+  // lot) fires an 'error' on the response; unhandled, that would CRASH
+  // the whole server. This was the "server silently dies" bug.
+  response.on('error', () => {});
+  request.on('error', () => {});
+
   // "/" means the homepage → serve index.html.
   // split('?') strips things like "?v=2" off the end of URLs.
-  const urlPath = request.url.split('?')[0];
+  const urlPath = decodeURIComponent(request.url.split('?')[0]);
   const filePath = path.join(__dirname, urlPath === '/' ? 'index.html' : urlPath);
 
   // Safety check: never serve files from OUTSIDE the project folder.
@@ -50,6 +56,15 @@ const server = http.createServer((request, response) => {
     response.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
     response.end(content);
   });
+});
+
+// Half-open/aborted sockets also raise errors at the server level.
+server.on('clientError', (err, socket) => socket.destroy());
+
+// Last line of defense: log ANY unexpected error instead of dying, so a
+// single hiccup can't take the dev server down mid-session.
+process.on('uncaughtException', (err) => {
+  console.error('[server] survived:', err.message);
 });
 
 server.listen(PORT, () => {
