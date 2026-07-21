@@ -39,3 +39,31 @@ into three.js.
   build time (only matrices). Retaining them costs a small array; do it
   if bushes-in-roads gets reported.
 - Traffic still drives road centrelines rather than a specific lane.
+
+## NPC job (feature/npcs)
+- **Downtown archetype ratio runs ~50/50** techie/founder where the
+  weights (8 vs 3) predict ~73/27. Berkeley comes out exactly right
+  (24/24 hippies), the weights load correctly, and the roll code reads
+  textbook-correct — so something subtle in spawn churn is flattening the
+  ratio. Cosmetic (the district joke still lands); left as an open
+  investigation.
+- **character-male-b can't take a top recolor**: his jacket is painted in
+  flesh-family palette colors, and the baker protects everything
+  flesh-toned so bare arms/legs never get painted over. He keeps his
+  authored tan outfit in every archetype (props still apply). Cutting him
+  from the pool was rejected — the cast must stay uniform across
+  archetypes. Fix would be a per-character exception table in
+  tools/npc_bake.js.
+- **Hand props swing with the walk animation** (attached to hand bones).
+  Looks natural for phone/glass/cup; the hippie's sign dips a bit low
+  mid-stride. A 'holding' pose overlay only exists as a full-body clip in
+  the pack, so blending it over the walk means masked animation work —
+  not attempted this round.
+- **Surfboard rides at a fixed offset under the arm** (bone-attached but
+  not gripped — no finger bones exist). Reads fine at gameplay distance.
+- **Wine-country districts aren't in the map's practical play area** —
+  the brief's "north bay if in map" resolved to: wine tourists spawn in
+  parks, Marina, harbors and Marin. Napa/Sonoma circles could be added
+  to DISTRICTS if anyone ever flies 60 km north.
+- **NPCs don't avoid each other or lamp posts** (no NPC-NPC collision) —
+  v1 scope cut, matches the brief.

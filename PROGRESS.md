@@ -66,3 +66,15 @@ Every step: change → `npm run shot` (launch check + capture) → judge vs
   final A/B baseline 42.3 vs current 41.5 (delta within noise; a lone 35.2
   reading was machine drift, disproven by the same-batch baseline).
 - Comparison strips: shots/tex_ferry_compare.png, tex_palace_compare.png.
+
+## NPCs — Bay Area archetypes (feature/npcs, tag npcs-start)
+| Item | Result | Evidence |
+|---|---|---|
+| Assets | Kenney "Mini Characters" v1.0, CC0 (12 rigged chars, 723 tris, 32 anims, GLB) — the only third-party download; every prop is code primitives. Exact source + license in CREDITS.md | assets/npcs/, License.txt |
+| Recolors | tools/npc_bake.js classifies every vertex (skin/top/bottom/shoes) offline from the shared palette; archetypes recolor garments as vertex colors with baked shading preserved. Skin/faces NEVER touched — every NPC draws a uniformly random base character regardless of archetype (that is the whole skin-tone policy) | npc-data.json |
+| Archetypes | 8 costumes: techie (hoodie+laptop+glasses), Berkeley hippie (procedural tie-dye + peace-sign placard), road cyclist (neon+helmet+code-built bike), wine tourist (linen+sun hat+glass, wobble walk), surfer (wetsuit+board), dog walker (own outfit + 1-3 leashed mini dogs), founder (gray hoodie+phone, gesticulates), marina dad (salmon polo+khakis+sunglasses+coffee) | shots/npc_final_lineup.png + npc_final_*.png |
+| Districts | config-editable circles (downtown/Marina/harbors/coast/Marin/Berkeley/Palo Alto + parks reusing TREE_SPOTS); per-archetype spawn weights. Verified live: Berkeley 24/24 hippies, downtown only techies+founders | shots/district_map.png, tools/district_map.html |
+| Sidewalks | spawn offset = lane-table half-width + margin (same math as the tree culling and painted lanes); predictive lookahead turns walkers around before crossing streets; any NPC ever caught inside a roadway despawns. Live runs: 0 violations across 24-NPC crowds at two sites (an earlier run caught 1 — fixed by the lookahead) | headless acceptance runs |
+| Behavior | wander along road edges, idle, archetype flavor anims, vehicle-scare react (step back + emote when a moving vehicle enters 9 m) — verified end to end headless. No ragdolls, no NPC-vehicle damage (per contract) | headless react run |
+| NPC count vs FPS | tools/fps.js A/B (real GPU RX 5700 XT, q=high, downtown cam, 3 alternating rounds): **0 NPCs 42.1 / 24 NPCs 40.3 / 40 NPCs 38.3 / 60 NPCs 36.9 avg fps** ≈ 0.09 fps per NPC. Caps set to hold the 40 floor: high 24, medium 16, low 8. NPCS.DENSITY dial (P panel) scales them; ?npcmax=N overrides for testing | this table |
+| Server fix | the "dev server dies silently" mystery: client aborts (headless Chrome closing mid-download) raised unhandled stream errors that killed node. server.js now survives them | server.js |

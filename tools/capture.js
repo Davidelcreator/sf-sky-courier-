@@ -40,7 +40,10 @@ const extraQuery = process.argv[3] || '';
 
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
+    // "...&dpr=2" renders at double pixel density — for inspecting small
+    // things (NPC props) without changing the framing.
+    const dpr = +(/(?:^|&)dpr=(\d)/.exec(extraQuery)?.[1] || 1);
+    await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: dpr });
 
     const url = BASE_URL + '?shot=1' + (extraQuery ? '&' + extraQuery : '');
     console.log('loading ' + url);
@@ -49,6 +52,12 @@ const extraQuery = process.argv[3] || '';
     // The game sets window.__shotReady once the style is initialised AND
     // every visible tile has loaded. 90 s budget: tile servers can be slow.
     await page.waitForFunction('window.__shotReady === true', { timeout: 90000 });
+
+    // Shooting the NPC lineup? Also wait for the character models — they
+    // download asynchronously and can finish after the map is ready.
+    if (extraQuery.includes('npcshot')) {
+      await page.waitForFunction('window.__npcShotCount > 0', { timeout: 60000 });
+    }
 
     // Small settle so label fade-ins and the last terrain meshes finish.
     await new Promise((r) => setTimeout(r, 2000));
@@ -61,11 +70,16 @@ const extraQuery = process.argv[3] || '';
       lng: +game.car.lng.toFixed(5),
       lat: +game.car.lat.toFixed(5),
       alt: +game.car.alt.toFixed(1),
+      npcs: window.__npcShotCount ?? window.__npcCount ?? 0,
     }));
     console.log('state: ' + JSON.stringify(st));
 
     const outPath = path.join(OUT_DIR, outName + '.png');
-    await page.screenshot({ path: outPath });
+    // Optional pixel-crop for inspecting small things (NPC props):
+    // pass "...&clip=x,y,w,h" (screen pixels) as part of extraQuery.
+    const clipM = /(?:^|&)clip=(\d+),(\d+),(\d+),(\d+)/.exec(extraQuery);
+    const clip = clipM ? { x: +clipM[1], y: +clipM[2], width: +clipM[3], height: +clipM[4] } : undefined;
+    await page.screenshot({ path: outPath, clip });
 
     // Blank-canvas guard: a uniform/empty frame compresses to almost
     // nothing. A real city frame at 1280x720 is comfortably > 60 KB.

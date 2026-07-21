@@ -165,9 +165,13 @@ export const GRAPHICS = {
   // (Sun + sky colors moved to the LOOK object below — one place for
   // every lighting/grade knob, editable live with the P panel.)
   PRESETS: {
-    low:    { atmosphere: false, sceneryMult: 0.4, trafficMax: 8,  shadows: false, waterReflect: false },
-    medium: { atmosphere: true,  sceneryMult: 0.8, trafficMax: 16, shadows: false, waterReflect: true },
-    high:   { atmosphere: true,  sceneryMult: 1.0, trafficMax: 24, shadows: true,  waterReflect: true },
+    // npcMax: measured 2026-07-16 (RX 5700 XT, downtown, q=high): ~0.09
+    // fps per NPC. 24 NPCs held the 40-fps floor (40.3 avg over 3 runs);
+    // 28 straddled it and 40 clearly dipped, so high stops at 24. Turn
+    // the P-panel "NPC crowd density" dial up if your machine has spare.
+    low:    { atmosphere: false, sceneryMult: 0.4, trafficMax: 8,  npcMax: 8,  shadows: false, waterReflect: false },
+    medium: { atmosphere: true,  sceneryMult: 0.8, trafficMax: 16, npcMax: 16, shadows: false, waterReflect: true },
+    high:   { atmosphere: true,  sceneryMult: 1.0, trafficMax: 24, npcMax: 24, shadows: true,  waterReflect: true },
   },
 };
 
@@ -351,6 +355,14 @@ export const LANES = {
   // Trees may not stand in the roadway: any tree within a road's real
   // width (from the lane table) PLUS this shoulder margin gets culled.
   TREE_SHOULDER_M: 2,
+
+  // Road surface colors. The map style ships cartoony yellow/white
+  // roads with orange outlines; we repaint them as asphalt so every
+  // street matches the 3D decks (Golden Gate, viaducts, ramps).
+  ASPHALT: '#33363b',        // street surface
+  ASPHALT_TUNNEL: '#26282c', // tunnel corridors read a step darker
+  CASING: '#232529',         // thin dark curb edge (was bright orange)
+  PATH: '#a7a5a0',           // footpaths/sidewalk lines: light concrete
 };
 
 export const ROADS3D = {
@@ -555,3 +567,98 @@ export const TREE_SPOTS = [
 // extra green patches). They read as ground cover next to the trees.
 // `mult` scales how many bushes per tree-spot count.
 export const BUSH_MULT = 1.6;
+
+// ============================================================
+// DISTRICTS — named Bay Area zones for NPC spawning
+// ============================================================
+// Each district is a list of circles: [lng, lat, radius-in-meters].
+// When an NPC spawns, we check which district the spot falls in and
+// weight the archetype choice by it (see NPC_ARCHETYPES below).
+// Anywhere that matches NO circle counts as 'residential'.
+// The 'parks' district is special: it reuses every TREE_SPOTS circle,
+// so adding a park up there automatically makes it NPC territory too.
+export const DISTRICTS = [
+  { id: 'downtown', name: 'Downtown SF / SoMa',
+    zones: [[-122.4025, 37.7895, 1600]] },
+  { id: 'marina', name: 'Marina district',
+    zones: [[-122.4370, 37.8030, 900]] },
+  { id: 'waterfront', name: 'Harbors & piers',
+    zones: [[-122.4170, 37.8080, 500],    // Fisherman's Wharf
+            [-122.3880, 37.7815, 400],    // South Beach harbor
+            [-122.4315, 37.8065, 350]] }, // Marina yacht harbor
+  { id: 'coast', name: 'Ocean coast & beaches',
+    zones: [[-122.5095, 37.7600, 1800],   // Ocean Beach
+            [-122.4840, 37.7935, 600],    // Baker Beach
+            [-122.4650, 37.8040, 500]] }, // Crissy Field
+  { id: 'marin', name: 'Marin / GG bridge ends',
+    zones: [[-122.4785, 37.8340, 1200],   // GG north vista + headlands
+            [-122.4855, 37.8570, 1500],   // Sausalito
+            [-122.4770, 37.8065, 700]] }, // GG toll plaza / Presidio bluff
+  { id: 'berkeley', name: 'Berkeley',
+    zones: [[-122.2680, 37.8715, 2500]] },
+  { id: 'paloalto', name: 'Palo Alto',
+    zones: [[-122.1630, 37.4440, 2500]] },
+  { id: 'parks', name: 'Parks', fromTreeSpots: true },
+  // 'residential' needs no circles — it's everywhere else.
+];
+
+// ============================================================
+// NPCS — pedestrians on the sidewalks
+// ============================================================
+export const NPCS = {
+  ENABLED: true,
+  DENSITY: 1.0,        // 0..1.5 — master crowd dial (× the quality cap)
+  HEIGHT_M: 1.7,       // how tall a character stands (models are chibi)
+  WALK_SPEED: 1.3,     // meters/second (~3 mph stroll)
+  SPAWN_RADIUS_M: 300, // spawn on sidewalks within this range of the car
+  SPAWN_MIN_M: 35,     // ...but never closer than this (no pop-in on top of you)
+  DESPAWN_M: 450,      // recycled onto a new sidewalk beyond this
+  SIDEWALK_M: 1.6,     // how far past the road's real edge they walk
+  REACT_RADIUS_M: 9,   // a vehicle inside this bubble triggers a reaction
+  REACT_SPEED: 4,      // ...if it's moving at least this fast (m/s)
+  ANIM_FREEZE_M: 130,  // beyond this distance animations update at 1/4 rate
+};
+
+// The cast. Every archetype is ONLY a costume (garment recolors), props
+// and behavior on the same shared characters — every NPC picks one of the
+// 12 base characters uniformly at random, whatever its archetype.
+//   top/bottom/shoes — hex recolors ('tiedye' is a special painter;
+//                      null keeps the character's own outfit)
+//   props   — built in code (js/npcs.js PROPS) or tiny CC0 pack models
+//   flavor  — an animation from the pack played now and then while idle
+//   weights — spawn likelihood per district (missing district = 0;
+//             'residential' is the everywhere-else fallback)
+export const NPC_ARCHETYPES = [
+  { id: 'techie', name: 'Techie',
+    top: '#3a3f46', bottom: '#2c3036', shoes: null,
+    props: ['glasses', 'laptop'], flavor: 'interact-right',
+    weights: { downtown: 8, paloalto: 3, residential: 1 } },
+  { id: 'hippie', name: 'Berkeley hippie',
+    top: 'tiedye', bottom: '#8a6a45', shoes: null,
+    props: ['sign'], flavor: 'emote-yes',
+    weights: { berkeley: 8, parks: 2, coast: 1 } },
+  { id: 'cyclist', name: 'Road cyclist',
+    top: '#d9f024', bottom: '#23252b', shoes: null,
+    props: ['helmet', 'bike'], flavor: 'emote-no',
+    weights: { marin: 8, coast: 3, parks: 2, waterfront: 2 } },
+  { id: 'winetourist', name: 'Wine tourist',
+    top: '#e7d7bd', bottom: '#f0ece2', shoes: null,
+    props: ['sunhat', 'wineglass'], flavor: 'emote-yes', wobble: true,
+    weights: { parks: 4, marina: 2, waterfront: 2, marin: 1 } },
+  { id: 'surfer', name: 'Surfer',
+    top: '#2b3a42', bottom: '#2b3a42', shoes: null,
+    props: ['surfboard'], flavor: 'emote-yes',
+    weights: { coast: 8, marina: 1 } },
+  { id: 'dogwalker', name: 'Dog walker',
+    top: null, bottom: null, shoes: null,   // keeps their own outfit
+    props: ['dogs'], flavor: 'pick-up',
+    weights: { parks: 5, residential: 3, marina: 2 } },
+  { id: 'founder', name: 'Founder',
+    top: '#8f9296', bottom: '#3e4a5e', shoes: null,
+    props: ['phone'], flavor: 'gesticulate', // emote-yes/no back and forth
+    weights: { paloalto: 8, downtown: 3 } },
+  { id: 'marinadad', name: 'Marina dad',
+    top: '#fa9a85', bottom: '#c9b491', shoes: null,
+    props: ['sunglasses', 'coffee'], flavor: 'emote-yes',
+    weights: { marina: 8, waterfront: 4, coast: 1 } },
+];
