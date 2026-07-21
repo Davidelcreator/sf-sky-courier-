@@ -770,6 +770,8 @@ let phys = { ...PHYSICS, ...VEHICLES[0].physics };
 // Handy while learning: open the browser console (F12) and type
 // `game.car` or `game.state` to watch the numbers change live.
 window.game = { car, state, keys: null, map };
+// Live view of the active vehicle's physics (phys is reassigned on V switch).
+Object.defineProperty(window.game, 'phys', { get: () => phys, configurable: true });
 
 
 // ============================================================
@@ -779,8 +781,12 @@ window.game = { car, state, keys: null, map };
 // are down, and the physics step reads that 60 times a second.
 // That's the standard pattern for smooth game controls.
 
-const keys = { forward: false, back: false, left: false, right: false, thrust: false };
+const keys = { forward: false, back: false, left: false, right: false, thrust: false, turbo: false };
 window.game.keys = keys;
+// Turbo can also be latched ON by the touch button (tap to toggle), so a
+// phone player doesn't have to hold a third control. Effective turbo =
+// this OR the held Shift key.
+const turboState = { latched: false };
 
 // Analog joystick position (touch screens). Each axis runs -1..1;
 // 0 = centered. x = steering (right positive), y = throttle (up/forward
@@ -812,6 +818,7 @@ const KEYMAP = {
   KeyA: 'left',    ArrowLeft: 'left',
   KeyD: 'right',   ArrowRight: 'right',
   Space: 'thrust',
+  ShiftLeft: 'turbo', ShiftRight: 'turbo', // hold for turbo boost
 };
 
 window.addEventListener('keydown', (e) => {
@@ -926,6 +933,24 @@ document.getElementById('btn-mode').addEventListener('pointerdown', (e) => {
   e.preventDefault();
   if (state.running) toggleFlightMode();
 });
+
+// --- Turbo ---
+// Hold Shift (desktop) OR tap the TURBO button to latch it on (tapping
+// again turns it off — a phone thumb can't hold a fourth control while
+// steering and flying). The button glows while turbo is active.
+function updateTurboButton() {
+  const btn = document.getElementById('btn-turbo');
+  if (btn) btn.classList.toggle('active', turboState.latched);
+}
+const turboBtn = document.getElementById('btn-turbo');
+if (turboBtn) {
+  turboBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    turboState.latched = !turboState.latched;
+    updateTurboButton();
+  });
+  turboBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+}
 
 // --- Camera angle ---
 // C key (or the CAM button) cycles through the presets in config.js;
@@ -2887,6 +2912,22 @@ function updateSceneObjects(timeSeconds) {
   // Shot mode: freeze every time-driven animation (water ripples, beacon
   // pulse, thruster flicker) at one instant so captures are repeatable.
   if (SHOT) timeSeconds = 100;
+
+  // --- Speed-scaled draw distance ---
+  // Flying fast thins the haze so distant bridges/roads/scenery stay
+  // visible instead of dissolving right in front of you. The fog eases
+  // between its parked density and fogClearMin× that as speed climbs to
+  // fogClearSpeed. (Shot mode keeps the parked density for repeatability.)
+  if (three.scene && three.scene.fog) {
+    // window.__fogSpeed lets the capture harness force a speed in shot mode.
+    const spd = SHOT ? (window.__fogSpeed || 0) : Math.hypot(car.vx, car.vy);
+    const t = Math.min(1, spd / (LOOK.fogClearSpeed || 130));
+    const factor = 1 - (1 - (LOOK.fogClearMin ?? 0.32)) * t;
+    // Ease toward the target so it doesn't visibly pump on speed changes.
+    const target = LOOK.fogDensity * factor;
+    three.scene.fog.density += (target - three.scene.fog.density) * 0.08;
+  }
+
   // --- Car position & heading ---
   three.carGroup.position.copy(toScene(car.lng, car.lat, car.alt));
   // Heading is clockwise-from-north; three.js rotates counterclockwise,
@@ -2967,6 +3008,9 @@ function updatePhysics(dt) {
   // Flight: SPACE gives full thrust; the fly joystick gives analog
   // thrust up (positive) or a downward push (negative) for fast descents.
   input.fly = clamp1((keys.thrust ? 1 : 0) + joystickFly.y);
+  // Turbo: Shift held OR the latched button. Boosts top speed + accel.
+  const turboOn = keys.turbo || turboState.latched;
+  const turboMult = turboOn ? (phys.TURBO || 1) : 1;
 
   // --- Steering ---
   const horizSpeed = Math.hypot(car.vx, car.vy);
@@ -2985,7 +3029,7 @@ function updatePhysics(dt) {
   // One line handles both: a positive throttle accelerates, a negative
   // one (joystick pulled back, or S held) brakes/reverses.
   if (input.throttle !== 0) {
-    const power = input.throttle > 0 ? phys.ACCEL : phys.BRAKE;
+    const power = input.throttle > 0 ? phys.ACCEL * turboMult : phys.BRAKE;
     car.vx += fwdE * power * input.throttle * dt;
     car.vy += fwdN * power * input.throttle * dt;
   }
@@ -3017,7 +3061,7 @@ function updatePhysics(dt) {
   const grip = onGround ? phys.GRIP_GROUND : phys.GRIP_AIR;
   sideSpeed *= Math.exp(-grip * dt);
 
-  fwdSpeed = Math.max(-phys.MAX_REVERSE, Math.min(phys.MAX_SPEED, fwdSpeed));
+  fwdSpeed = Math.max(-phys.MAX_REVERSE, Math.min(phys.MAX_SPEED * turboMult, fwdSpeed));
 
   // Recombine the two parts back into east/north velocity.
   car.vx = fwdE * fwdSpeed + sideE * sideSpeed;
@@ -3028,7 +3072,7 @@ function updatePhysics(dt) {
   // pushes the car toward the ground (60% strength, only while airborne)
   // so you can dive to a delivery instead of waiting on gravity.
   if (input.fly > 0) car.vAlt += phys.THRUST * input.fly * dt;
-  else if (input.fly < 0 && !onGround) car.vAlt += phys.THRUST * 0.6 * input.fly * dt;
+  else if (input.fly < 0 && !onGround) car.vAlt += phys.THRUST * (phys.DOWN_THRUST ?? 0.6) * input.fly * dt;
 
   // In GLIDE mode, forward speed makes lift (like wings) that cancels
   // part of gravity. min() caps the lift: gliding always sinks a

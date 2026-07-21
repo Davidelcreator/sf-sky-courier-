@@ -61,6 +61,8 @@ export const PHYSICS = {
   THRUST: 45,         // upward push while holding SPACE (m/s²).
                       // Must beat GRAVITY or you'd never take off!
   VERTICAL_DRAG: 0.9, // air resistance up/down — sets a max climb/fall speed
+  TURBO: 1.7,         // top speed & acceleration ×, while TURBO (Shift/button) is held
+  DOWN_THRUST: 0.6,   // fraction of THRUST when pushing the fly stick DOWN
 
   // GLIDE mode (toggle with G / the MODE button): forward speed makes
   // lift, like a plane's wings. Lift cancels part of gravity — never
@@ -93,6 +95,7 @@ export const VEHICLES = [
       THRUST: 34,         // it can still hop/fly, just gently
       GRAVITY: 26,
       GRIP_GROUND: 4.5,   // sticks to the road
+      TURBO: 1.4,         // a gentler boost than the car
     },
   },
   {
@@ -100,16 +103,17 @@ export const VEHICLES = [
     model: 'ufo',
     canDive: true,        // the saucer can descend below sea level
     physics: {
-      MAX_SPEED: 420,     // ≈ 940 mph. It is a UFO.
-      ACCEL: 170,         // and it gets there absurdly fast
-      BRAKE: 220,
-      DRAG: 0.4,          // note 170/0.4 ≈ 425 — just above the cap,
-                          // so the cap is actually reachable
+      MAX_SPEED: 620,     // ≈ 1390 mph. It is a UFO. (was 420)
+      ACCEL: 260,         // and it gets there absurdly fast (260/0.4 = 650 cap)
+      BRAKE: 260,
+      DRAG: 0.4,
       TURN_RATE: 2.8,     // saucers corner like nothing on Earth...
       GRIP_AIR: 3.0,      // ...and don't skid sideways through the sky
-      THRUST: 75,
+      THRUST: 150,        // huge vertical push — the right stick zips it up/down
       GRAVITY: 18,        // built by someone who dislikes gravity
-      VERTICAL_DRAG: 1.2,
+      VERTICAL_DRAG: 1.0, // lets it reach a high climb/dive speed
+      DOWN_THRUST: 1.0,   // full-strength dive when the stick is pulled down
+      TURBO: 2.2,         // hold TURBO → ≈ 3000 mph
     },
   },
 ];
@@ -214,14 +218,13 @@ export const LOOK = {
   gradeBrightness: 1.04,
 
   // --- Water ---
-  // Real bay water photographs as a gray-green mirror of the sky, not
-  // saturated navy (reference: lake #a09ea0, river #64605e). Glitter is
-  // kept but gentler and near-white, like real sun sparkle.
-  waterDeep: '#5f6a6d',
-  waterShallow: '#9aa4a5',
-  waterSun: '#e8e4d8',
-  waterOpacity: 0.85,
-  waterGlint: 0.35,
+  // Gray-blue sky-mirror, lightened from the original overcast tone (it
+  // read too dark when flying). Glitter kept gentle and near-white.
+  waterDeep: '#7d8b93',
+  waterShallow: '#b3bec2',
+  waterSun: '#eeeae0',
+  waterOpacity: 0.82,
+  waterGlint: 0.38,
 
   // --- Aerial haze on our 3D objects ---
   // Exponential fog so bridges/trees/traffic melt into the same warm-gray
@@ -229,6 +232,11 @@ export const LOOK = {
   // 3 km, ghost silhouette at 5 km (measured from the reference),
   // invisible under 300 m.
   fogDensity: 0.00028,
+  // Flying fast, you want to SEE further. The fog thins with speed: at or
+  // above fogClearSpeed (m/s) the density drops to fogClearMin × the base,
+  // so distant bridges/roads stay visible on a high-speed run.
+  fogClearSpeed: 130,   // ≈ 290 mph — full clearing
+  fogClearMin: 0.32,    // fog at full speed = 32% of the parked density
 
   // --- Foliage ---
   // Real trees photograph OLIVE, not "game green": reference sample
