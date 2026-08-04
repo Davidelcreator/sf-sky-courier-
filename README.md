@@ -322,11 +322,25 @@ than copying poses, and that a non-humanoid rig throws instead of T-posing.
 
 ## What happened to SF Sky Courier
 
-The previous game in this repo is intact in `legacy-sky-courier/`, and the tag
-**`pre-fighter`** on `main` is the exact commit before any of this. The
-fighting game needs the repo root — Vite wants `index.html` there, and `/src`,
-`/config` and `/animations` are top-level by design. Nothing was deleted:
+Nothing was deleted. The previous game is intact in `legacy-sky-courier/`, and
+`main` is untouched — every commit here is on the feature branch. The fighting
+game needs the repo root: Vite wants `index.html` there, and `/src`, `/config`
+and `/animations` are top-level by design.
 
 ```bash
-git checkout pre-fighter        # the courier, exactly as it was
+git checkout main         # the courier, exactly as it was
 ```
+
+The `pre-fighter` tag was created locally at that same commit
+(`0df0e30`), but **this session's git proxy accepts branch pushes and silently
+drops tag pushes** — `git push origin refs/tags/pre-fighter` reports
+"Everything up-to-date" while `--dry-run` shows `* [new tag]`, and the tag never
+lands. Push it from a normal clone if you want it on the remote:
+
+```bash
+git tag -a pre-fighter 0df0e30 -m "Before the fighting-game restructure"
+git push origin pre-fighter
+```
+
+Losing the tag costs nothing here, because `main` already points at exactly that
+commit — it is the restore point either way.
