@@ -147,7 +147,17 @@ export class AIController {
     // And only if it is still a threat — no point blocking a whiffed recovery.
     if (foe.phase === PHASE.RECOVERY) return false;
 
-    const threat = (foe.moveData?.range ?? 0) * foe.scale + self.radius + 0.35;
+    // A projectile special has no melee range at all — its hitbox belongs to
+    // the projectile, not the move. Judging it by move.range would score a
+    // fireball as harmless from two paces away, so range specials threaten the
+    // whole stage and are blocked from anywhere.
+    const md = foe.moveData;
+    const ranged = md?.isSpecial &&
+      (md.special?.type === 'projectile' || md.special?.type === 'beam');
+
+    const threat = ranged
+      ? this.game.stage.halfWidth * 2
+      : (md?.range ?? 0) * foe.scale + self.radius + 0.35;
     if (gap > threat) return false;
 
     // One roll per move, held for as long as the move is live.
