@@ -2,133 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>SF Sky Courier</title>
-  <!-- maximum-scale=1 stops phones from zooming the page while playing -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <!-- Description shown by search engines and link previews -->
-  <meta name="description"
-        content="Fly a delivery car over the real San Francisco — real streets, real 3D buildings, free OpenStreetMap data.">
-  <meta property="og:title" content="SF Sky Courier">
-  <meta property="og:description"
-        content="A flying-car delivery game over the real San Francisco. Drive the streets or hold SPACE and fly.">
-  <!-- A tiny SVG containing an emoji makes a zero-file favicon (tab icon) -->
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>">
-
-  <!-- MapLibre GL JS: the open-source library that draws the real 3D map.
-       We load it from a CDN (Content Delivery Network) — a public server that
-       hosts popular libraries so we don't have to download them ourselves. -->
-  <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
-  <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
-
-  <!-- An "import map" tells the browser where to find the three.js library
-       when our code says `import ... from 'three'`. -->
-  <script type="importmap">
-    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
-  </script>
-
-  <!-- The ?v=NN below is a "cache-buster": bump this number by 1 every
-       time we deploy, and browsers are forced to load the fresh files
-       instead of stale saved copies. This one number covers main.js,
-       config.js (main.js passes it along), and style.css. -->
-  <link rel="stylesheet" href="style.css?v=34">
+  <title>Sky Fighter</title>
+  <!-- viewport-fit=cover + maximum-scale=1 stop phones zooming or letterboxing
+       the canvas while you play. user-scalable=no kills the double-tap zoom
+       that otherwise fires when you mash the attack buttons. -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d17">
+  <meta name="description" content="A 2.5D browser fighting game — three-phase procedural animation, real frame data, touch and gamepad ready.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥊</text></svg>">
+  <link rel="stylesheet" href="./src/ui/style.css">
 </head>
 <body>
-
-  <!-- The map fills the whole screen. Everything else floats on top of it. -->
-  <div id="map"></div>
-
-  <!-- Blue wash that fades in when you dive below the sea surface. -->
-  <div id="underwater"></div>
-
-  <!-- ===== HUD (Heads-Up Display): score, compass, speed, messages ===== -->
-  <div id="hud">
-    <div id="topbar">
-      <div class="panel" id="score-box">
-        SCORE <span id="score">0</span>
-        <div id="packages">&#128230; 0</div>
-        <div id="hearts">&#10084;&#10084;&#10084;</div>
-      </div>
-      <div class="panel" id="compass">
-        <!-- This arrow is rotated by JavaScript to point at the target -->
-        <div id="compass-arrow">&#9650;</div>
-        <div id="distance">&mdash;</div>
-      </div>
-      <div class="panel" id="target-box">
-        DELIVER TO <span id="target">&mdash;</span>
-      </div>
-    </div>
-
-    <div id="readouts">
-      <span class="panel" id="speed">0 mph</span>
-      <span class="panel" id="altitude">0 ft</span>
-      <span class="panel" id="flight-mode">&#11014; HOVER</span>
-      <span class="panel" id="gfx">GFX HIGH</span>
-    </div>
-
-    <!-- Short popup messages like "Delivered! +100" appear here -->
-    <div id="message"></div>
-
-    <div id="help" class="panel">
-      W / &#8593; drive &nbsp;&bull;&nbsp; S / &#8595; brake &nbsp;&bull;&nbsp;
-      A D / &#8592; &#8594; steer &nbsp;&bull;&nbsp; hold SPACE to fly
-      &nbsp;&bull;&nbsp; G glide/hover &nbsp;&bull;&nbsp; C camera
-      &nbsp;&bull;&nbsp; drag to look &nbsp;&bull;&nbsp; V vehicle
-      &nbsp;&bull;&nbsp; B map/satellite &nbsp;&bull;&nbsp; Q graphics
-      &nbsp;&bull;&nbsp; R reset
-    </div>
-
-    <!-- On-screen controls for phones/tablets. Hidden on desktop;
-         JavaScript reveals them when it detects a touch screen. -->
-    <div id="touch-controls">
-      <!-- Left: analog joystick. Drag the knob left/right to steer and
-           up/down to accelerate/brake. The knob is moved by JavaScript. -->
-      <div id="joystick">
-        <div id="joystick-knob"></div>
-      </div>
-      <!-- Right: tap CAM to change camera, MODE to switch hover/glide;
-           the second joystick below is FLIGHT — push up to thrust
-           skyward (half push = half thrust), pull down to dive. -->
-      <div id="touch-right">
-        <button class="tbtn" id="btn-map">&#128506; MAP</button>
-        <button class="tbtn" id="btn-veh">&#128760; VEH</button>
-        <button class="tbtn" id="btn-cam">&#127909; CAM</button>
-        <button class="tbtn" id="btn-mode">MODE</button>
-        <button class="tbtn" id="btn-turbo">&#9889; TURBO</button>
-        <div id="joystick-fly">
-          <div id="joystick-fly-knob"></div>
-        </div>
-      </div>
-    </div>
+  <!-- The renderer owns this element; everything else is a DOM overlay on top. -->
+  <div id="stage">
+    <canvas id="game-canvas"></canvas>
+    <div id="ui-root"></div>
   </div>
-
-  <!-- ===== Start screen, shown until the player clicks ===== -->
-  <div id="start-overlay">
-    <div id="start-card">
-      <h1>SF&nbsp;SKY&nbsp;COURIER</h1>
-      <p>Deliver packages across the real San&nbsp;Francisco.<br>
-         Drive the streets &mdash; or hold <b>SPACE</b> and fly over them.</p>
-      <ul>
-        <li><b>W / &#8593;</b> accelerate</li>
-        <li><b>S / &#8595;</b> brake / reverse</li>
-        <li><b>A D / &#8592; &#8594;</b> steer</li>
-        <li><b>SPACE</b> (hold) upward thrust</li>
-      </ul>
-      <button id="start-button">START ENGINE</button>
-    </div>
-  </div>
-
-  <!-- Game Over card, shown when your hearts run out. -->
-  <div id="gameover">
-    <div id="gameover-card">
-      <h1>GAME&nbsp;OVER</h1>
-      <p>You ran out of hearts.</p>
-      <p class="big">Final score: <span id="final-score">0</span></p>
-      <button id="restart-button">TRY AGAIN</button>
-    </div>
-  </div>
-
-  <!-- Our game code. type="module" lets us use modern `import` statements.
-       The ?v= must match the number on the stylesheet above. -->
-  <script type="module" src="js/main.js?v=34"></script>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>

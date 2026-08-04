@@ -2,8 +2,13 @@
 # .claude/ holds local tooling config specific to this machine.
 .claude/
 
-# dev-tooling dependencies (restore with: npm install)
+# dependencies (restore with: npm install)
 node_modules/
+
+# Vite build output
+dist/
+.vite/
+*.local
 
 # reference frames from the Genie 3 video (copyrighted footage — local only)
 ref/
@@ -11,3 +16,5 @@ ref/
 # capture-script output (regenerate with: npm run shot)
 shots/
 ref2/
+
+.DS_Store
