@@ -37,8 +37,15 @@ export class FightCamera {
     const separation = Math.abs(a.x - b.x);
     // Also account for height so a jump-in does not clip out of frame.
     const vertical = Math.max(a.y, b.y) * 0.8;
+
+    // Only separation BEYOND what baseDistance already frames pulls the camera
+    // back. Feeding the raw separation in means the starting gap alone adds
+    // several units and the fighters spend the whole round rendered tiny.
+    const comfort = c.comfortSeparation ?? 0;
+    const excess = Math.max(0, separation - comfort);
+
     return clamp(
-      c.baseDistance + (separation + vertical) * c.separationScale,
+      c.baseDistance + (excess + vertical) * c.separationScale,
       c.minDistance,
       c.maxDistance,
     );

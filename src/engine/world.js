@@ -70,26 +70,29 @@ export function createWorld(canvas, game) {
   scene.add(strip);
 
   // --- corner walls: the player must be able to *see* the corner they are in.
+  // Kept low and pushed back — tall slabs near the camera read as black bars
+  // down the sides of the screen and swallow a third of the frame.
   const wallMat = new THREE.MeshStandardMaterial({
-    color: '#1b1d2e', roughness: 0.7, metalness: 0.25,
+    color: '#2f3350', roughness: 0.62, metalness: 0.3,
   });
   for (const dir of [-1, 1]) {
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.5, 5, 7), wallMat);
-    wall.position.set(dir * (half + 0.25), 2.5, -1);
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.1, 4.4), wallMat);
+    wall.position.set(dir * (half + 0.25), 1.55, -1.4);
     wall.castShadow = true;
     wall.receiveShadow = true;
     scene.add(wall);
 
+    // A lit edge marks exactly where the corner clamp bites.
     const glow = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 4.6, 0.08),
-      new THREE.MeshBasicMaterial({ color: '#4d7dff' }),
+      new THREE.BoxGeometry(0.1, 3.0, 0.1),
+      new THREE.MeshBasicMaterial({ color: '#5f8cff' }),
     );
-    glow.position.set(dir * (half - 0.02), 2.4, 2.4);
+    glow.position.set(dir * (half - 0.03), 1.55, 0.75);
     scene.add(glow);
   }
 
-  // --- backdrop: a shallow ring of blocks reads as a crowd/skyline for free.
-  const backMat = new THREE.MeshStandardMaterial({ color: '#171a2b', roughness: 1 });
+  // --- backdrop: a shallow ring of blocks reads as a skyline for free.
+  const backMat = new THREE.MeshStandardMaterial({ color: '#232842', roughness: 1 });
   const back = new THREE.Group();
   for (let i = 0; i < 26; i++) {
     const h = 2 + ((i * 7919) % 100) / 100 * 6;
@@ -98,6 +101,14 @@ export function createWorld(canvas, game) {
     back.add(b);
   }
   scene.add(back);
+
+  // A dim fill aimed at the backdrop keeps it from crushing to black without
+  // washing out the key light on the fighters.
+  const backFill = new THREE.DirectionalLight('#6f8fd8', 0.8);
+  backFill.position.set(0, 5, -6);
+  backFill.target.position.set(0, 1, -9);
+  scene.add(backFill);
+  scene.add(backFill.target);
 
   return { renderer, scene, camera, floor, key };
 }

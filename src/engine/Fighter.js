@@ -77,6 +77,10 @@ export class Fighter {
 
     // Cosmetic, read by the animator: alternates lead/rear limb per strike.
     this.strikeParity = 0;
+    // Increments on every move activation. The clip animator uses it to tell
+    // "the same move again" from "the same move still running", so a repeated
+    // jab restarts its clip instead of continuing the old one.
+    this.activationId = 0;
 
     this.blockHeld = false;
     this.wasGrounded = true;
@@ -310,6 +314,7 @@ export class Fighter {
 
     // Alternate lead/rear limb so repeated jabs do not look like a loop.
     this.strikeParity ^= 1;
+    this.activationId++;
 
     ctx.events?.push({ type: 'startMove', fighter: this, move: key });
     return true;

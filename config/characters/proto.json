@@ -1,0 +1,42 @@
+{
+  "$comment": "Demo character proving the retarget path end to end. The only difference from Blaze and Titan is the `model` key: with it, CharacterLoader loads the GLB, retargets the shared clip set onto its skeleton, and plays real clips instead of the procedural poser. Delete the `model` line and this character falls back to the box rig with identical fight behaviour — that is the whole point of the ladder.",
+
+  "id": "proto",
+  "name": "Proto",
+  "tagline": "Retargeted clips, all-round frames",
+
+  "model": "/models/humanoid.glb",
+  "modelForward": "+z",
+
+  "color": "#7f6fd8",
+  "accent": "#c9b8ff",
+  "skin": "#d8c2a6",
+
+  "health": 108,
+  "speed": 0.055,
+  "jumpV": 0.32,
+  "weight": 1.1,
+  "scale": 1.0,
+
+  "moves": {
+    "punch": { "dmg": 7,  "startup": 5, "active": 3, "recovery": 9,  "range": 1.2,  "knock": 0.1,  "stun": 13 },
+    "kick":  { "dmg": 11, "startup": 8, "active": 4, "recovery": 15, "range": 1.52, "knock": 0.17, "stun": 19 }
+  },
+
+  "special": {
+    "name": "Pulse Beam",
+    "type": "beam",
+    "dmg": 15,
+    "startup": 11,
+    "recovery": 24,
+    "cooldown": 210,
+    "stun": 23,
+    "knock": 0.24,
+    "beam": {
+      "length": 6.0,
+      "activeFrames": 14,
+      "thickness": 0.36,
+      "color": "#c9b8ff"
+    }
+  }
+}

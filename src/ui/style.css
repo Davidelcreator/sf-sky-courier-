@@ -16,6 +16,13 @@
 
 * { box-sizing: border-box; }
 
+/* The UA stylesheet's `[hidden] { display: none }` is a *user-agent* rule, so
+   any author `display` declaration beats it. `.screen` sets `display: flex` and
+   `.banner` sets `display: grid`, which silently un-hides both the moment they
+   are marked hidden — leaving every screen stacked and swallowing clicks. This
+   one line is what actually makes `hidden` mean hidden. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -168,6 +175,35 @@ html, body {
   100% { transform: scale(1); }
 }
 
+/* ---------------------------------------------------------- rotate hint */
+
+.rotate-hint { display: none; }
+
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate-hint {
+    display: block;
+    position: absolute;
+    left: 50%;
+    top: 30%;
+    transform: translate(-50%, -50%);
+    padding: 8px 15px;
+    border-radius: 999px;
+    background: rgba(16, 19, 34, 0.82);
+    border: 1px solid var(--edge);
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: rotate-fade 7s ease-out forwards;
+  }
+}
+
+@keyframes rotate-fade {
+  0%, 55% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
 /* --------------------------------------------------------------- banner */
 
 .banner {
@@ -179,7 +215,8 @@ html, body {
   pointer-events: none;
 }
 .banner-text {
-  font-size: clamp(34px, 11vw, 92px);
+  /* vh in the clamp keeps "FIGHT!" from covering the fighters on a phone. */
+  font-size: clamp(30px, min(11vw, 17vh), 92px);
   font-weight: 900;
   letter-spacing: 0.06em;
   text-shadow: 0 6px 30px rgba(0, 0, 0, 0.8);
@@ -371,11 +408,13 @@ html, body {
   z-index: 5;
 }
 
+/* Controls are sized against BOTH axes. Scaling on vw alone means a landscape
+   phone (wide but only ~390px tall) gets a stick nearly half the screen high. */
 .touch-stick {
   position: absolute;
   left: max(16px, env(safe-area-inset-left));
   bottom: max(16px, env(safe-area-inset-bottom));
-  width: clamp(112px, 26vw, 168px);
+  width: clamp(104px, min(26vw, 40vh), 168px);
   aspect-ratio: 1;
   border-radius: 50%;
   border: 2px solid rgba(150, 175, 255, 0.35);
@@ -412,31 +451,45 @@ html, body {
 .touch-stick::after { content: 'BLOCK'; bottom: 7%; }
 
 .touch-buttons {
+  --btn: clamp(50px, min(13vw, 19vh), 74px);
   position: absolute;
   right: max(16px, env(safe-area-inset-right));
   bottom: max(16px, env(safe-area-inset-bottom));
-  width: clamp(150px, 38vw, 220px);
-  height: clamp(150px, 38vw, 220px);
+  width: calc(var(--btn) * 2.6);
+  height: calc(var(--btn) * 2.6);
   pointer-events: none;
 }
 
 .touch-btn {
   position: absolute;
-  width: clamp(56px, 14vw, 76px);
-  aspect-ratio: 1;
+  width: var(--btn);
+  height: var(--btn);
   border-radius: 50%;
   border: 2px solid rgba(150, 175, 255, 0.4);
   background: rgba(30, 38, 70, 0.55);
   color: var(--text);
   font: inherit;
   font-weight: 800;
-  font-size: clamp(14px, 3.4vw, 18px);
+  font-size: calc(var(--btn) * 0.26);
   letter-spacing: 0.04em;
   pointer-events: auto;
   touch-action: none;
+  /* right/bottom below place the button's CENTRE, so the arc maths stays
+     readable; translate(50%,50%) puts the box back around that point. */
+  transform: translate(50%, 50%);
   transition: transform 70ms, background 70ms;
 }
-.touch-btn.is-down { background: rgba(77, 125, 255, 0.7); transform: scale(0.92); }
+
+/* Three points on an arc sweeping up from the thumb. Centres are ~1x the
+   button size apart, which is what stops them overlapping at any scale. */
+.touch-btn[data-slot='0'] { right: calc(var(--btn) * 0.70); bottom: calc(var(--btn) * 0.58); }
+.touch-btn[data-slot='1'] { right: calc(var(--btn) * 1.53); bottom: calc(var(--btn) * 1.13); }
+.touch-btn[data-slot='2'] { right: calc(var(--btn) * 2.03); bottom: calc(var(--btn) * 2.13); }
+
+.touch-btn.is-down {
+  background: rgba(77, 125, 255, 0.7);
+  transform: translate(50%, 50%) scale(0.92);
+}
 .touch-btn[data-action='special'] { border-color: rgba(255, 209, 102, 0.6); }
 .touch-btn[data-action='special'].is-down { background: rgba(255, 167, 38, 0.75); }
 

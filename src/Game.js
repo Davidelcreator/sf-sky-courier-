@@ -83,6 +83,12 @@ export class Game {
 
   /** Build (or rebuild) a match between two character ids. */
   async start(p1Id, p2Id, vsAI = true) {
+    // Loading a model is async, and the loop keeps running across the await.
+    // Without stopping first, update() ticks a live match whose fighters have
+    // already been torn down. Belt and braces: update/render also guard on the
+    // fighter count, since `running` alone is a single point of failure.
+    this.running = false;
+    this.match = null;
     this.teardownFighters();
     this.vsAI = vsAI;
 
@@ -146,6 +152,7 @@ export class Game {
 
   update() {
     if (!this.running || this.paused || !this.match) return;
+    if (this.fighters.length < 2 || this.visuals.length < 2) return;
 
     // 1. Hit-stop freezes everything below, including the round clock.
     if (this.hitStop.tick()) return;
@@ -239,7 +246,7 @@ export class Game {
   // -------------------------------------------------------------------------
 
   render(alpha, dtMs) {
-    if (!this.match) return;
+    if (!this.match || this.fighters.length < 2) return;
     resizeRenderer(this.renderer, this.canvas);
 
     const k = Math.min(1, dtMs / (1000 / 60));

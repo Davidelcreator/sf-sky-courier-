@@ -139,20 +139,15 @@ export class TouchSource {
     this.root.appendChild(cluster);
     this._cluster = cluster;
 
-    // Three positions on an arc, sweeping up from the lower right. Index order
-    // matches bindings.touchSlots, so remapping is reordering that array.
-    const ARC = [
-      { x: 4, y: 62 },
-      { x: 40, y: 24 },
-      { x: 96, y: 4 },
-    ];
-
-    this._buttons = ARC.map((pos, i) => {
+    // Three buttons arranged on an arc sweeping up from the thumb. The arc
+    // positions live in CSS (keyed off data-slot) so they can scale with the
+    // button size on both axes — hard-coded pixel offsets overlap on a short
+    // landscape phone. Slot index matches bindings.touchSlots, so remapping an
+    // action is reordering that array.
+    this._buttons = [0, 1, 2].map((i) => {
       const el = document.createElement('button');
       el.type = 'button';
       el.className = 'touch-btn';
-      el.style.right = `${pos.x}px`;
-      el.style.bottom = `${pos.y}px`;
       el.dataset.slot = String(i);
       cluster.appendChild(el);
 

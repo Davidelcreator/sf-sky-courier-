@@ -54,6 +54,13 @@ export class HUD {
     ];
     this._comboCount = [0, 0];
 
+    // Portrait on a phone has to widen the FOV enough to fit both fighters,
+    // which makes them small — that is geometry, not a bug. Nudge toward
+    // landscape rather than pretending it is fine. Visibility and the fade are
+    // pure CSS; living inside the HUD means it never shows over a menu.
+    this.rotateHint = el('div', 'rotate-hint', this.root);
+    this.rotateHint.textContent = 'Rotate your phone for a wider view';
+
     this.banner = el('div', 'banner', this.root);
     this.banner.hidden = true;
     this.bannerText = el('div', 'banner-text', this.banner);

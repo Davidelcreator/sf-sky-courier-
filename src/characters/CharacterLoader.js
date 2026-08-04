@@ -133,9 +133,26 @@ export class CharacterLoader {
     const mesh = findSkinnedMesh(model);
     if (!mesh) throw new Error('no SkinnedMesh in model');
 
+    // SkeletonUtils.clone shares materials between clones, so they must be
+    // copied before any per-character change — otherwise tinting one fighter
+    // repaints the other. Only untextured materials are tinted: overwriting
+    // `color` on a textured model would flatten a real generated asset's look.
+    const ownedMaterials = [];
+    const tint = cfg.color && cfg.tintModel !== false ? new THREE.Color(cfg.color) : null;
+    const copy = (m) => {
+      const c = m.clone();
+      if (tint && !c.map) c.color = tint.clone();
+      ownedMaterials.push(c);
+      return c;
+    };
+
     model.traverse((o) => {
-      if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+      if (!o.isMesh) return;
+      o.castShadow = true;
+      o.receiveShadow = true;
+      o.material = Array.isArray(o.material) ? o.material.map(copy) : copy(o.material);
     });
+    const disposeMaterials = () => ownedMaterials.forEach((m) => m.dispose());
 
     // root -> body (animation offsets) -> orient (author-space fix) -> model
     const root = new THREE.Group();
@@ -180,7 +197,7 @@ export class CharacterLoader {
               animation: `retargeted clips (${clips.length}) [${clips.map((c) => c.name).join(', ')}]`,
               coverage: cov,
             },
-            dispose: () => animator.dispose(),
+            dispose: () => { animator.dispose(); disposeMaterials(); },
           };
         }
         info.warnings.push('clip set has no idle — falling back to the poser');
@@ -200,7 +217,7 @@ export class CharacterLoader {
       animator: new PoseAnimator(target, this.game),
       kind: 'skeleton-fallback',
       info: { ...info, rig: cfg.model, animation: 'procedural poser on imported skeleton' },
-      dispose: () => {},
+      dispose: disposeMaterials,
     };
   }
 

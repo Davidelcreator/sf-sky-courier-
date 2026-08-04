@@ -176,7 +176,7 @@ export class AIController {
     // Punish: the opponent is stuck in recovery — take the free hit.
     const punishable = foe.state === STATE.ATTACK && foe.phase === PHASE.RECOVERY;
 
-    if (inRange && (punishable || this.rng() > 0.28)) {
+    if (inRange && (punishable || this.rng() < (ai.attackChance ?? 0.62))) {
       this._chooseAttack(self, gap, reach);
       return;
     }
