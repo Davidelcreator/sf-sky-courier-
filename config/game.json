@@ -56,6 +56,11 @@
     }
   },
 
+  "input": {
+    "bufferFrames": 4,
+    "$comment": "Attacks fire on the press, not while held. A press opens a buffer this many frames wide, consumed when the move actually starts — so an attack pressed slightly before recovery ends still comes out. Set to 0 for strict frame-perfect input."
+  },
+
   "camera": {
     "fov": 45,
     "baseDistance": 8.6,
