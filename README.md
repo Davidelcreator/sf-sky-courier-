@@ -13,32 +13,63 @@ npm run build    # -> dist/
 
 ---
 
-## ⚠️ On the reference prototype
+## ⚠️ Reconciliation status vs the prototype
 
-**`fighting-game.jsx` was not present in this repo, in any upload directory, or
-anywhere on the session filesystem.** Everything here was built from the written
-specification in the task description, which was detailed enough to work from.
+The repo was built from the written spec (`fighting-game.jsx` was not in this
+repo or on the session filesystem). A **partial** copy of the prototype has
+since been supplied — it truncates part-way through the fourth character — so
+reconciliation is done for what arrived and outstanding for the rest.
 
-That means one thing is *not* guaranteed: the exact numeric constants. Frame
-data, damage, speeds, lerp rates and AI weights are my values chosen to match
-the described feel and the conventions of the genre — not the artifact's.
-Every behaviour described in the brief is implemented and verified (see
-`npm test`), but if you still have the artifact, reconciling it is quick,
-because **every one of those numbers lives in `/config`** and none of them are
-duplicated in code. Diff the JSON, not the engine.
+### ✅ Reconciled — copied verbatim
 
-Specifically worth checking against the original:
+`blaze` and `titan` in `config/characters/` are now the prototype's
+`CHARACTERS` entries exactly: every frame count, damage, range, knockback,
+stun, cooldown, colour and display name.
 
-| Where | What to compare |
-| ----- | --------------- |
-| `config/characters/*.json` | frame data, damage, ranges, health/speed/weight |
-| `config/game.json` → `combat` | chip 25%, blockstun 60%, hitstop 2–6 curve |
-| `config/game.json` → `animation.phaseLerp` | 0.34 / 0.90 / 0.18 — the feel |
-| `config/game.json` → `ai` | reaction frames, aggression |
-| `src/characters/rig/PoseAnimator.js` | the pose constants themselves |
+Drift that was corrected (mine → prototype): Blaze `speed` 0.062 → **0.085**,
+`jumpV` 0.34 → **0.26**, jab `knock` 0.09 → **0.05**, kick `startup` 7 → **8**;
+Titan `kick.startup` 9 → **11**, `weight` 1.35 → **1.4**, special `startup`
+12 → **10**, `stun` 26 → **30**. Active frames were low across the board
+(3–4 vs the prototype's 4–6).
 
-Two places where I made a judgement call the brief did not settle, both easy to
-flip:
+Two derived thresholds had to move with them, because the prototype's damage
+numbers run lower than the ones I had guessed:
+
+- `combat.shake.heavyDamageThreshold` 10 → **9**, or Blaze's 9-damage kick
+  would have silently stopped shaking the camera.
+- `combat.hitstop.damageAtMax` 22 → **18**, pinned to the hardest hit in the
+  roster. Above that, no move ever earns the full 6-frame freeze.
+
+Resulting spread — jab 2f, punch 3f, kick 3–4f, special 5–6f, with shake on
+kicks and specials only.
+
+### ❌ Still outstanding — the paste is truncated
+
+It cuts off inside `shirty`'s `kick` at `knock: 0.`, so **everything after the
+character table is still unknown**:
+
+| Missing | Currently using | Risk if wrong |
+| ------- | --------------- | ------------- |
+| `gravity`, friction, air control | `game.json` → `physics` | **Jump arcs.** `jumpV` is now the prototype's, but height and airtime are `jumpV²/2g` and `2·jumpV/g` — without the matching gravity the arc is unverified. |
+| Knockback decay | `physics.knockbackDecay` | `knock` is exact; how far it *carries* is not. |
+| Stage half-width | `stage.halfWidth: 7.2` | Corner distance, spacing |
+| Projectile speed/life/radius, lunge speed/duration | placeholder sub-blocks in the character JSON | The prototype's `special` has **no** per-type parameters, so these live as globals somewhere in the cut region. |
+| Pose constants + per-phase lerp rates | `PoseAnimator.js`, `animation.phaseLerp` | The actual feel of every strike |
+| Camera, AI, chip/blockstun multipliers, combo window, round/timer | `game.json` | Balance and framing |
+
+### ❓ Two decisions waiting on you
+
+1. **The roster is 4, not 2.** The prototype also has `sketch` (featherweight,
+   ink projectile) and `shirty` (Spin Cycle projectile). `sketch` arrived
+   complete; `shirty` is cut off mid-kick. Neither is in this repo yet.
+2. **`bodyType` is not implemented.** `sketch` declares `bodyType: "stick"` and
+   `shirty` declares `"shirt"` — the prototype's rig builds more than one body
+   shape. `ProceduralRig` builds one. Adding them means two more rig variants;
+   until then those two would render as the default box fighter.
+
+### Judgement calls the spec did not settle
+
+Both still unconfirmed against the prototype, both one-line flips:
 
 - **Attacks are edge-triggered with a 4-frame input buffer**
   (`game.json` → `input.bufferFrames`). Level-triggering turns a held key into

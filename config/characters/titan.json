@@ -1,31 +1,33 @@
 {
+  "$comment": "Stats and frame data are the prototype's CHARACTERS.titan verbatim. The `lunge` sub-block is NOT from the prototype — its special carries no per-type parameters, so those constants live somewhere in the truncated part of the file. These are placeholders.",
+
   "id": "titan",
-  "name": "Titan",
-  "tagline": "Heavy armour, closing lunge",
-  "color": "#3d7bd6",
-  "accent": "#a9d6ff",
-  "skin": "#caa07d",
+  "name": "TITAN",
+  "tagline": "Heavy • Lunge special",
+  "color": "#2e7dff",
+  "accent": "#9fe8ff",
+  "skin": "#c9a06b",
 
   "health": 120,
-  "speed": 0.048,
-  "jumpV": 0.3,
-  "weight": 1.35,
+  "speed": 0.058,
+  "jumpV": 0.22,
+  "weight": 1.4,
   "scale": 1.12,
 
   "moves": {
-    "punch": { "dmg": 8,  "startup": 6, "active": 3, "recovery": 11, "range": 1.25, "knock": 0.11, "stun": 14 },
-    "kick":  { "dmg": 13, "startup": 9, "active": 4, "recovery": 17, "range": 1.6,  "knock": 0.2,  "stun": 20 }
+    "punch": { "dmg": 7,  "startup": 6,  "active": 4, "recovery": 10, "range": 1.2, "knock": 0.07, "stun": 16 },
+    "kick":  { "dmg": 12, "startup": 11, "active": 6, "recovery": 17, "range": 1.5, "knock": 0.14, "stun": 22 }
   },
 
   "special": {
-    "name": "Titan Rush",
+    "name": "SEISMIC RUSH",
     "type": "lunge",
     "dmg": 18,
-    "startup": 12,
+    "startup": 10,
     "recovery": 26,
-    "cooldown": 240,
-    "stun": 26,
-    "knock": 0.3,
+    "cooldown": 210,
+    "stun": 30,
+    "knock": 0.24,
     "lunge": {
       "speed": 0.27,
       "activeFrames": 16,

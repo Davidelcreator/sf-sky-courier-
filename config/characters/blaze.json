@@ -1,39 +1,39 @@
 {
+  "$comment": "Stats and frame data are the prototype's CHARACTERS.blaze verbatim. The `projectile` sub-block is NOT from the prototype — its special carries no per-type parameters, so those constants live somewhere in the truncated part of the file. These are placeholders.",
+
   "id": "blaze",
-  "name": "Blaze",
-  "tagline": "Fast hands, ranged pressure",
-  "color": "#ff5a2b",
-  "accent": "#ffd166",
-  "skin": "#f0b48a",
+  "name": "BLAZE",
+  "tagline": "Fast • Projectile special",
+  "color": "#ff4d2e",
+  "accent": "#ffd23f",
+  "skin": "#ffb37a",
 
   "health": 100,
-  "speed": 0.062,
-  "jumpV": 0.34,
+  "speed": 0.085,
+  "jumpV": 0.26,
   "weight": 1.0,
   "scale": 1.0,
 
   "moves": {
-    "punch": { "dmg": 6,  "startup": 4, "active": 3, "recovery": 8,  "range": 1.15, "knock": 0.09, "stun": 12 },
-    "kick":  { "dmg": 10, "startup": 7, "active": 4, "recovery": 14, "range": 1.5,  "knock": 0.16, "stun": 18 }
+    "punch": { "dmg": 5, "startup": 4, "active": 4, "recovery": 8,  "range": 1.15, "knock": 0.05, "stun": 14 },
+    "kick":  { "dmg": 9, "startup": 8, "active": 5, "recovery": 14, "range": 1.45, "knock": 0.11, "stun": 20 }
   },
 
   "special": {
-    "name": "Fire Bolt",
+    "name": "PLASMA SHOT",
     "type": "projectile",
     "dmg": 14,
-    "startup": 10,
+    "startup": 12,
     "recovery": 22,
-    "cooldown": 180,
-    "stun": 22,
-    "knock": 0.22,
+    "cooldown": 170,
+    "stun": 24,
+    "knock": 0.16,
     "projectile": {
       "speed": 0.17,
       "life": 150,
       "radius": 0.3,
       "height": 1.05,
-      "color": "#ff7a29"
+      "color": "#ffd23f"
     }
-  },
-
-  "$comment": "Model/animation overrides are optional. Omit `model` and the fighter is built from the procedural two-segment rig; set it to a GLB URL and CharacterLoader retargets the shared clip set onto it, falling back to the procedural poser if retargeting fails."
+  }
 }

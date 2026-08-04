@@ -43,16 +43,16 @@
       "minFrames": 2,
       "maxFrames": 6,
       "damageAtMin": 4,
-      "damageAtMax": 22,
+      "damageAtMax": 18,
       "blockedMultiplier": 0.6,
-      "$comment": "Freeze both fighters for min..max frames, lerped by damage. A jab barely stutters; a special slams."
+      "$comment": "Freeze both fighters for min..max frames, lerped by damage. A jab barely stutters; a special slams. damageAtMax is pinned to the hardest hit in the roster (Titan's 18) so the biggest move actually reaches maxFrames — set it above that and nothing ever earns the full freeze. Current spread: jab 2, punch 3, kick 3-4, special 5-6."
     },
     "shake": {
-      "heavyDamageThreshold": 10,
+      "heavyDamageThreshold": 9,
       "magnitude": 0.17,
       "decay": 0.85,
       "blockedMultiplier": 0.4,
-      "$comment": "Only hits at or above heavyDamageThreshold shake the camera, so jabs stay readable."
+      "$comment": "Only hits at or above heavyDamageThreshold shake the camera, so jabs stay readable. 9 puts both kicks (9 and 12) above the line and both jabs (5 and 7) below it — move it with the roster's damage numbers, not independently."
     }
   },
 
