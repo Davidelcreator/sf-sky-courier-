@@ -1,0 +1,115 @@
+{
+  "$comment": "Global tuning surface. Everything the engine reads at runtime lives here; no engine edit should ever be needed to rebalance the game. Times are in LOGIC FRAMES at 60Hz unless the key says 'Seconds'. Distances are world units (a fighter is ~1.8 tall).",
+
+  "timestep": {
+    "hz": 60,
+    "maxCatchUpSteps": 5,
+    "$comment": "Logic runs at a fixed 60Hz. maxCatchUpSteps caps how many logic steps one render frame may consume, so a tab that was backgrounded resumes instead of spiral-of-deathing."
+  },
+
+  "stage": {
+    "halfWidth": 7.2,
+    "floorY": 0,
+    "cornerClamp": true,
+    "$comment": "Fighters are clamped to +/- halfWidth. Hitting the wall is what makes corner pressure real."
+  },
+
+  "physics": {
+    "gravity": 0.024,
+    "groundFriction": 0.8,
+    "airFriction": 0.98,
+    "airControl": 0.55,
+    "knockbackDecay": 0.86,
+    "pushApartMinGap": 0.66,
+    "pushApartStrength": 0.5,
+    "$comment": "pushApart keeps two bodies from occupying the same space; each fighter is displaced half the overlap, and the corner clamp then wins so you can be pinned."
+  },
+
+  "match": {
+    "roundsToWin": 2,
+    "roundTimeSeconds": 60,
+    "introFrames": 100,
+    "koFreezeFrames": 80,
+    "roundEndFrames": 140,
+    "$comment": "roundsToWin 2 = best of 3."
+  },
+
+  "combat": {
+    "blockChipMultiplier": 0.25,
+    "blockStunMultiplier": 0.6,
+    "blockKnockbackMultiplier": 0.45,
+    "comboResetFrames": 26,
+    "hitstop": {
+      "minFrames": 2,
+      "maxFrames": 6,
+      "damageAtMin": 4,
+      "damageAtMax": 22,
+      "blockedMultiplier": 0.6,
+      "$comment": "Freeze both fighters for min..max frames, lerped by damage. A jab barely stutters; a special slams."
+    },
+    "shake": {
+      "heavyDamageThreshold": 10,
+      "magnitude": 0.17,
+      "decay": 0.85,
+      "blockedMultiplier": 0.4,
+      "$comment": "Only hits at or above heavyDamageThreshold shake the camera, so jabs stay readable."
+    }
+  },
+
+  "camera": {
+    "fov": 45,
+    "baseDistance": 8.6,
+    "minDistance": 7.4,
+    "maxDistance": 14.5,
+    "separationScale": 0.8,
+    "height": 2.3,
+    "lookHeight": 1.3,
+    "followLerp": 0.12,
+    "zoomLerp": 0.07,
+    "maxMidpointDrift": 3.2,
+    "$comment": "Camera tracks the midpoint of both fighters and pulls back as they separate."
+  },
+
+  "ai": {
+    "enabled": true,
+    "decisionIntervalFrames": 16,
+    "reactionFrames": 11,
+    "blockChance": 0.55,
+    "attackRangeSlack": 0.18,
+    "approachSpeedScale": 0.85,
+    "retreatChance": 0.18,
+    "retreatFrames": 26,
+    "jumpChance": 0.05,
+    "specialChance": 0.28,
+    "kickBias": 0.4,
+    "$comment": "reactionFrames is how long the AI takes to notice a startup before it can react-block — lower is harder."
+  },
+
+  "animation": {
+    "phaseLerp": {
+      "idle": 0.12,
+      "windup": 0.34,
+      "strike": 0.9,
+      "recovery": 0.18,
+      "$comment": "The feel of the whole game lives in these four numbers. strike snaps onto the pose on active frames; recovery settles slowly out of it."
+    },
+    "weightShift": 0.17,
+    "twistAmount": 0.55,
+    "breathAmplitude": 0.028,
+    "breathSpeed": 0.055,
+    "walkCycleSpeed": 0.22,
+    "walkSwing": 0.55,
+    "useClips": true,
+    "$comment": "useClips=false forces the procedural poser even when retargeted clips loaded — handy for A/B-ing feel."
+  },
+
+  "fx": {
+    "sparkCount": 10,
+    "sparkLife": 22,
+    "sparkSpeed": 0.075,
+    "blockSparkCount": 6,
+    "projectileTrailLength": 8
+  },
+
+  "roster": ["blaze", "titan"]
+}

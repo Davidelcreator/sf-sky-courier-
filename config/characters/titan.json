@@ -1,0 +1,36 @@
+{
+  "id": "titan",
+  "name": "Titan",
+  "tagline": "Heavy armour, closing lunge",
+  "color": "#3d7bd6",
+  "accent": "#a9d6ff",
+  "skin": "#caa07d",
+
+  "health": 120,
+  "speed": 0.048,
+  "jumpV": 0.3,
+  "weight": 1.35,
+  "scale": 1.12,
+
+  "moves": {
+    "punch": { "dmg": 8,  "startup": 6, "active": 3, "recovery": 11, "range": 1.25, "knock": 0.11, "stun": 14 },
+    "kick":  { "dmg": 13, "startup": 9, "active": 4, "recovery": 17, "range": 1.6,  "knock": 0.2,  "stun": 20 }
+  },
+
+  "special": {
+    "name": "Titan Rush",
+    "type": "lunge",
+    "dmg": 18,
+    "startup": 12,
+    "recovery": 26,
+    "cooldown": 240,
+    "stun": 26,
+    "knock": 0.3,
+    "lunge": {
+      "speed": 0.27,
+      "activeFrames": 16,
+      "hitRange": 1.5,
+      "friction": 0.93
+    }
+  }
+}

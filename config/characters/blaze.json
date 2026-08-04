@@ -1,0 +1,39 @@
+{
+  "id": "blaze",
+  "name": "Blaze",
+  "tagline": "Fast hands, ranged pressure",
+  "color": "#ff5a2b",
+  "accent": "#ffd166",
+  "skin": "#f0b48a",
+
+  "health": 100,
+  "speed": 0.062,
+  "jumpV": 0.34,
+  "weight": 1.0,
+  "scale": 1.0,
+
+  "moves": {
+    "punch": { "dmg": 6,  "startup": 4, "active": 3, "recovery": 8,  "range": 1.15, "knock": 0.09, "stun": 12 },
+    "kick":  { "dmg": 10, "startup": 7, "active": 4, "recovery": 14, "range": 1.5,  "knock": 0.16, "stun": 18 }
+  },
+
+  "special": {
+    "name": "Fire Bolt",
+    "type": "projectile",
+    "dmg": 14,
+    "startup": 10,
+    "recovery": 22,
+    "cooldown": 180,
+    "stun": 22,
+    "knock": 0.22,
+    "projectile": {
+      "speed": 0.17,
+      "life": 150,
+      "radius": 0.3,
+      "height": 1.05,
+      "color": "#ff7a29"
+    }
+  },
+
+  "$comment": "Model/animation overrides are optional. Omit `model` and the fighter is built from the procedural two-segment rig; set it to a GLB URL and CharacterLoader retargets the shared clip set onto it, falling back to the procedural poser if retargeting fails."
+}
