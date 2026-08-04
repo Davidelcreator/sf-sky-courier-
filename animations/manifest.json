@@ -1,0 +1,25 @@
+{
+  "$comment": "The shared animation set. Clips are authored once against sourceModel and retargeted onto every character at load time — that is what lets a model generated from a text prompt fight without anyone hand-animating it. Drop new GLB/FBX files in this folder and add an entry here.",
+
+  "sourceModel": "/models/humanoid.glb",
+  "fps": 60,
+
+  "clips": [
+    { "as": "idle",    "clip": "idle" },
+    { "as": "walk",    "clip": "walk" },
+    { "as": "jump",    "clip": "jump" },
+    { "as": "block",   "clip": "block" },
+    { "as": "hit",     "clip": "hit" },
+    { "as": "ko",      "clip": "ko" },
+    { "as": "punch",   "clip": "punch" },
+    { "as": "kick",    "clip": "kick" },
+    { "as": "special", "clip": "special" }
+  ],
+
+  "$schema_notes": {
+    "as": "the name the engine looks up — see ClipAnimator's CLIP_CANDIDATES",
+    "url": "optional; defaults to sourceModel. Point it at any .glb or .fbx in this folder",
+    "clip": "the clip's name inside that file",
+    "index": "use instead of `clip` to take the Nth animation in the file"
+  }
+}
