@@ -57,6 +57,12 @@ function rootStaticDirs() {
   };
 }
 
+// ARTIFACT_BUILD produces a single JS chunk with no dynamic imports, which is
+// what tools/build-artifact.js needs to inline the whole game into one HTML
+// file. Normal builds keep FBXLoader code-split so nobody pays 48 KB for a
+// loader that only runs if a character ships .fbx clips.
+const SINGLE = process.env.ARTIFACT_BUILD === '1';
+
 // `base: './'` keeps every asset URL relative, so the build works whether
 // Netlify serves it from the domain root or a deploy-preview subpath.
 export default defineConfig({
@@ -67,9 +73,10 @@ export default defineConfig({
     port: 5173,
   },
   build: {
-    outDir: 'dist',
+    outDir: SINGLE ? 'dist-artifact' : 'dist',
     target: 'es2020',
     assetsInlineLimit: 0, // never inline .glb — keep models as real files
+    ...(SINGLE ? { rollupOptions: { output: { inlineDynamicImports: true } } } : {}),
   },
   publicDir: 'public',
 });
