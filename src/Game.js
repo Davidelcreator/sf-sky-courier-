@@ -217,7 +217,8 @@ export class Game {
           // one move, however long the buffer window was.
           const profile = e.fighter.profile;
           if (profile && !(this.vsAI && profile === 'p2')) {
-            this.input.consume(profile, e.move);
+            // e.action, not e.move — a lowPunch is still a 'punch' press.
+            this.input.consume(profile, e.action ?? e.move);
           }
           break;
         }

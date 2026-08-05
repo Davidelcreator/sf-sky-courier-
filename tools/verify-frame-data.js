@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { Fighter, STATE, PHASE } from '../src/engine/Fighter.js';
+import { Fighter, STATE, PHASE, HEIGHT } from '../src/engine/Fighter.js';
 import { resolveCombat, isBlocking, hitstopFrames, shakeMagnitude } from '../src/engine/combat.js';
 import { resolveBodies } from '../src/engine/physics.js';
 import { Match, PHASE as MATCH_PHASE } from '../src/engine/Match.js';
@@ -92,6 +92,115 @@ section('frame data');
 }
 
 // ---------------------------------------------------------------------------
+section('attack heights and guard heights');
+
+// b starts on the right facing left, so "back" (away from a) is +1 for b.
+const GUARD_HIGH = intent({ block: true, moveX: 1 });
+const GUARD_LOW = intent({ block: true });
+
+/** Fire one attack and return its hit event, if any. */
+function runAttack(a, b, attackIntent, defendIntent, maxFrames = 48) {
+  let hit = null;
+  for (let f = 0; f < maxFrames && !hit; f++) {
+    const ev = step(a, b, f === 0 ? attackIntent : NEUTRAL, defendIntent);
+    hit = ev.find((e) => e.type === 'hit');
+  }
+  return hit;
+}
+
+{
+  const [a, b] = pair();
+  b.inputX = 1;
+  b.blockHeld = true;
+  assert(b.guardHeight === HEIGHT.HIGH, 'block + away stands into a high guard', b.guardHeight);
+  b.inputX = 0;
+  assert(b.guardHeight === HEIGHT.LOW, 'block alone crouches into a low guard', b.guardHeight);
+  b.blockHeld = false;
+  assert(b.guardHeight === null, 'not blocking means no guard');
+  b.blockHeld = true;
+  b.y = 1.5;
+  assert(b.guardHeight === null, 'no guard in the air');
+}
+
+{
+  // block + attack selects the low variant, and still spends the punch buffer.
+  const [a, b] = pair();
+  const ctx = { events: [], spawnProjectile() {}, spawnBeam() {} };
+  a.tick(intent({ punch: true, block: true }), b, ctx);
+  assert(a.move === 'lowPunch', 'block + punch selects the low punch', String(a.move));
+  const ev = ctx.events.find((e) => e.type === 'startMove');
+  assert(ev?.action === 'punch',
+    'a low punch still consumes the punch input buffer', String(ev?.action));
+  assert(a.moveData.height === HEIGHT.LOW, 'low punch carries LOW height');
+}
+
+{
+  const [a, b] = pair();
+  const ctx = { events: [], spawnProjectile() {}, spawnBeam() {} };
+  a.tick(intent({ kick: true, block: true }), b, ctx);
+  assert(a.move === 'lowKick', 'block + kick selects the low kick', String(a.move));
+  assert(a.moveData.height === HEIGHT.LOW, 'low kick carries LOW height');
+}
+
+{
+  // A character with no low variants keeps working — the high move comes out.
+  const noLows = JSON.parse(JSON.stringify(BLAZE));
+  delete noLows.moves.lowPunch;
+  const a = new Fighter(noLows, GAME, { side: 0, x: -0.5, facing: 1 });
+  const b = new Fighter(TITAN, GAME, { side: 1, x: 0.5, facing: -1 });
+  const ctx = { events: [], spawnProjectile() {}, spawnBeam() {} };
+  a.tick(intent({ punch: true, block: true }), b, ctx);
+  assert(a.move === 'punch',
+    'a character with no low variant falls back to the high one', String(a.move));
+}
+
+// --- the 2x2 that makes heights mean anything -------------------------------
+{
+  const [a, b] = pair();
+  const hit = runAttack(a, b, intent({ punch: true }), GUARD_HIGH);
+  assert(hit?.blocked === true, 'HIGH attack vs HIGH guard -> blocked');
+}
+{
+  const [a, b] = pair();
+  const hit = runAttack(a, b, intent({ punch: true }), GUARD_LOW);
+  assert(hit && hit.blocked === false, 'HIGH attack vs LOW guard -> clean hit');
+}
+{
+  const [a, b] = pair();
+  const hit = runAttack(a, b, intent({ punch: true, block: true }), GUARD_LOW);
+  assert(hit?.blocked === true, 'LOW attack vs LOW guard -> blocked');
+}
+{
+  const [a, b] = pair();
+  const hit = runAttack(a, b, intent({ punch: true, block: true }), GUARD_HIGH);
+  assert(hit && hit.blocked === false, 'LOW attack vs HIGH guard -> clean hit');
+}
+{
+  // Specials are MID: never a coin flip on top of a cooldown.
+  const [a, b] = pair(TITAN, BLAZE);
+  const hitLow = runAttack(a, b, intent({ special: true }), intent({ block: true }), 60);
+  assert(hitLow?.blocked === true, 'MID special is blocked by a low guard');
+
+  const [c, d] = pair(TITAN, BLAZE);
+  const hitHigh = runAttack(c, d, intent({ special: true }), intent({ block: true, moveX: 1 }), 60);
+  assert(hitHigh?.blocked === true, 'MID special is blocked by a high guard');
+}
+
+{
+  // A sweep travels along the floor, so leaving the floor beats it outright.
+  const [a, b] = pair();
+  b.y = 1.4;
+  b.vy = 0.05;
+  let connected = false;
+  for (let f = 0; f < 30; f++) {
+    b.y = Math.max(0.9, b.y); // hold them airborne for the whole active window
+    const ev = step(a, b, f === 0 ? intent({ kick: true, block: true }) : NEUTRAL);
+    if (ev.some((e) => e.type === 'hit')) connected = true;
+  }
+  assert(!connected, 'a low attack passes under an airborne opponent');
+}
+
+// ---------------------------------------------------------------------------
 section('blocking, chip damage and stun');
 
 {
@@ -99,15 +208,9 @@ section('blocking, chip damage and stun');
   const m = BLAZE.moves.punch;
   const startHP = b.health;
 
-  let hit = null;
-  for (let f = 0; f < 20 && !hit; f++) {
-    const events = step(a, b,
-      f === 0 ? intent({ punch: true }) : NEUTRAL,
-      intent({ block: true }));
-    hit = events.find((e) => e.type === 'hit');
-  }
+  const hit = runAttack(a, b, intent({ punch: true }), GUARD_HIGH);
 
-  assert(!!hit && hit.blocked, 'holding block blocks the hit');
+  assert(!!hit && hit.blocked, 'a matched guard blocks the hit');
   assert(near(startHP - b.health, m.dmg * GAME.combat.blockChipMultiplier, 1e-6),
     `chip damage is ${GAME.combat.blockChipMultiplier * 100}% of raw`,
     `took ${startHP - b.health}, expected ${m.dmg * GAME.combat.blockChipMultiplier}`);

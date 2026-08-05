@@ -33,6 +33,11 @@ const ATTACK_CANDIDATES = {
   punch: ['punch', 'jab', 'attackpunch', 'attack1'],
   kick: ['kick', 'attackkick', 'attack2'],
   special: ['special', 'cast', 'attackspecial', 'attack3'],
+  // No low clips in the bundled set, so these resolve to nothing and the
+  // hybrid animator hands the move to the procedural poser on the same
+  // skeleton. Drop a `lowpunch` clip into /animations and it takes over.
+  lowPunch: ['lowpunch', 'crouchpunch', 'lowjab'],
+  lowKick: ['lowkick', 'sweep', 'crouchkick'],
 };
 
 const norm = (s) => String(s).toLowerCase().replace(/[\s._-]/g, '');

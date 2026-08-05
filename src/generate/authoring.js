@@ -25,8 +25,15 @@ no markdown fence.
   "weight": 0.85-1.45,    // divides incoming knockback
   "scale": 0.92-1.15,
   "moves": {
-    "punch": { "dmg":5-9,  "startup":3-7, "active":2-4, "recovery":7-13, "range":1.0-1.35, "knock":0.07-0.13, "stun":10-16 },
-    "kick":  { "dmg":9-15, "startup":6-11,"active":3-5, "recovery":12-20,"range":1.35-1.7, "knock":0.14-0.22, "stun":16-22 }
+    // Four normals. "height" is the whole point: a LOW attack is only blocked
+    // by a crouching guard and a HIGH attack only by a standing one, so the
+    // pair is a genuine 50/50 the opponent has to guess.
+    "punch":    { "height":"high", "dmg":5-9,  "startup":3-7,  "active":2-4, "recovery":7-13,  "range":1.0-1.35, "knock":0.07-0.13, "stun":10-16 },
+    "kick":     { "height":"high", "dmg":9-15, "startup":6-11, "active":3-5, "recovery":12-20, "range":1.35-1.7, "knock":0.14-0.22, "stun":16-22 },
+    // The crouching jab is the fastest move you have: least damage, least reach.
+    "lowPunch": { "height":"low",  "dmg":4-7,  "startup":3-6,  "active":2-4, "recovery":8-14,  "range":0.95-1.25,"knock":0.03-0.06, "stun":9-14 },
+    // The sweep reaches furthest and is the most punishable thing in the kit.
+    "lowKick":  { "height":"low",  "dmg":8-13, "startup":8-13, "active":3-5, "recovery":17-26, "range":1.5-1.8,  "knock":0.11-0.18, "stun":15-21 }
   },
   "special": {
     "name": "Move Name",
@@ -48,6 +55,11 @@ Balance rules — these matter more than the numbers being "interesting":
   on block and therefore spammable with no counterplay.
 - Keep the total of health + damage output roughly comparable to a character
   with health 100, a 4-frame jab for 6, and a 7-frame kick for 10.
+- A low attack must be worse than its high counterpart in damage, and better in
+  either speed (lowPunch) or reach (lowKick) — otherwise there is no reason to
+  ever press the high one and the mixup collapses.
+- lowKick recovery should be the longest in the kit. A sweep that is safe on
+  block has no counterplay.
 `.trim();
 
 const HUES = {
@@ -145,6 +157,7 @@ export function deriveConfigFromPrompt(prompt, { modelUrl } = {}) {
     scale,
     moves: {
       punch: {
+        height: 'high',
         dmg: heavy ? 8 : light ? 5 : 6,
         startup: punchStartup, active: 3,
         recovery: heavy ? 12 : light ? 8 : 10,
@@ -153,12 +166,34 @@ export function deriveConfigFromPrompt(prompt, { modelUrl } = {}) {
         stun: heavy ? 15 : 12,
       },
       kick: {
+        height: 'high',
         dmg: heavy ? 14 : light ? 9 : 11,
         startup: kickStartup, active: 4,
         recovery: heavy ? 18 : light ? 13 : 15,
         range: heavy ? 1.62 : 1.48,
         knock: heavy ? 0.21 : 0.16,
         stun: heavy ? 21 : 18,
+      },
+      // Lows are derived from the highs rather than authored independently, so
+      // a generated character keeps its archetype: the crouching jab trades
+      // damage for speed, the sweep trades recovery for reach.
+      lowPunch: {
+        height: 'low',
+        dmg: heavy ? 6 : light ? 4 : 5,
+        startup: Math.max(3, punchStartup - 1), active: 3,
+        recovery: heavy ? 13 : light ? 9 : 11,
+        range: heavy ? 1.2 : 1.06,
+        knock: heavy ? 0.05 : 0.04,
+        stun: heavy ? 13 : 11,
+      },
+      lowKick: {
+        height: 'low',
+        dmg: heavy ? 12 : light ? 8 : 10,
+        startup: kickStartup + 1, active: 4,
+        recovery: heavy ? 24 : light ? 18 : 20,
+        range: heavy ? 1.74 : 1.6,
+        knock: heavy ? 0.17 : 0.13,
+        stun: heavy ? 20 : 17,
       },
     },
     special,

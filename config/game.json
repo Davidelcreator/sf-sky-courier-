@@ -89,7 +89,9 @@
     "jumpChance": 0.05,
     "specialChance": 0.28,
     "kickBias": 0.4,
-    "$comment": "This whole block is the difficulty dial. reactionFrames is how long the AI takes to notice a startup before it can react-block, so lower is harder (below ~5 it blocks even jabs). attackChance is how often it commits when in range, and decisionIntervalFrames how often it re-decides — raise either to make it less relentless."
+    "lowAttackChance": 0.4,
+    "guardReadChance": 0.5,
+    "$comment": "This whole block is the difficulty dial. reactionFrames is how long the AI takes to notice a startup before it can react-block, so lower is harder (below ~5 it blocks even jabs). attackChance is how often it commits when in range, and decisionIntervalFrames how often it re-decides — raise either to make it less relentless. guardReadChance is the high/low mixup dial: at 1 the AI always guards the correct height and low attacks become pointless, at 0 it always guesses wrong; 0.5 is a genuine coin flip. lowAttackChance is how often it goes low itself."
   },
 
   "animation": {
@@ -98,8 +100,9 @@
       "windup": 0.34,
       "strike": 0.9,
       "recovery": 0.18,
-      "$comment": "The feel of the whole game lives in these four numbers. strike snaps onto the pose on active frames; recovery settles slowly out of it."
+      "$comment": "The feel of the whole game lives in these four numbers. strike snaps onto the pose on active frames; recovery settles slowly out of it. See also strikeLead below, which decides HOW EARLY in the active window the strike pose is reached."
     },
+    "strikeLead": 2.2,
     "weightShift": 0.17,
     "twistAmount": 0.55,
     "breathAmplitude": 0.028,

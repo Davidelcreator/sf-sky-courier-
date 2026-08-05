@@ -7,7 +7,7 @@ pipeline on top, and every tunable number in JSON.
 ```bash
 npm install
 npm run dev      # http://localhost:5173 (also listens on your LAN for phones)
-npm test         # 76 headless checks: fight rules + retargeting
+npm test         # 93 headless checks: fight rules + retargeting
 npm run build    # -> dist/
 ```
 
@@ -91,8 +91,13 @@ Both still unconfirmed against the prototype, both one-line flips:
 | Block  | `S` (hold) | `↓` (hold) |
 | Punch  | `J`      | `Num 1` |
 | Kick   | `K`      | `Num 2` |
+| **Low punch** | `S`+`J` | `↓`+`Num 1` |
+| **Low kick (sweep)** | `S`+`K` | `↓`+`Num 2` |
 | Special| `L`      | `Num 3` |
 | Menu   | `Esc`    | |
+
+**Guard height** — hold block and the stick decides what you are guarding:
+block *alone* crouches (stops lows), block *plus away* stands (stops highs).
 
 ### Touch
 
@@ -103,6 +108,10 @@ one.
 - **Stick X** is analog: nudge it to creep, push it to walk.
 - **Stick up** jumps, **stick down** blocks. Dead zone 0.3, rescaled so the
   first live input is not a jolt.
+- **Stick down + a button** is the low version of that attack — no fourth
+  button, which is why the modifier is block rather than a new one. Multi-touch
+  makes this one thumb on the stick and one on the button.
+- **Stick down-back** stands you into a high guard; straight down crouches.
 - **Button slots** are swappable in Controls → Touch buttons.
 
 Landscape is strongly preferred. Portrait works, but fitting both fighters
@@ -122,6 +131,28 @@ special. Button indices are rebindable through the same store as the keyboard.
 Nothing in `/config` is compiled. Edit a number, reload, feel the change.
 `/config/README.md` documents the full character schema.
 
+### Attack heights — the core mixup
+
+Four normals across two heights, and a guard that is also a height:
+
+| | crouching guard | standing guard |
+| ------------- | --------------- | -------------- |
+| **low** attack  | blocked | **clean hit** |
+| **high** attack | **clean hit** | blocked |
+| **mid** (specials, projectiles) | blocked | blocked |
+
+Guessing wrong means eating the hit clean, which is what makes four moves
+genuinely more than two. Two rules stop it degenerating:
+
+- **Specials are MID.** They already cost a cooldown; making them a coin flip
+  too would punish you twice for the same commitment.
+- **Lows pass under an airborne opponent.** Jumping beats a sweep outright, so
+  low pressure is never strictly better than high.
+
+`ai.guardReadChance` is the dial: at `1` the CPU always guards the correct
+height and lows become pointless; at `0` it always guesses wrong. `0.5` is a
+true coin flip. `ai.lowAttackChance` is how often it goes low itself.
+
 ### The five numbers that decide how the game feels
 
 | Knob | File | What it does |
@@ -131,6 +162,7 @@ Nothing in `/config` is compiled. Edit a number, reload, feel the change.
 | `animation.phaseLerp.strike` | `game.json` | `0.9` — how hard the strike pose snaps on active frames. Lower it and punches go limp. |
 | `animation.phaseLerp.recovery` | `game.json` | `0.18` — how lazily the fighter unwinds. This is most of the "weight". |
 | `combat.hitstop` | `game.json` | 2–6 frame freeze, lerped by damage. The cheapest way to give a hit mass. |
+| `animation.strikeLead` | `game.json` | `2.2` — how early in the active window the strike pose is reached. At `1` the limb is still travelling while the move is already hitting, and a sweep never looks extended. |
 
 ### Common adjustments
 
@@ -335,7 +367,7 @@ previews on a subpath work identically to the production root.
 
 ```bash
 npm test              # both suites
-npm run test:frames   # 56 checks — the fight rules
+npm run test:frames   # 73 checks — the fight rules
 npm run test:retarget # 20 checks — the retargeting pipeline
 ```
 

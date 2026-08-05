@@ -1,4 +1,4 @@
-import { STATE, PHASE } from './Fighter.js';
+import { STATE, PHASE, HEIGHT } from './Fighter.js';
 import { clamp, lerp, invLerp, sign } from './math.js';
 
 /**
@@ -18,13 +18,24 @@ import { clamp, lerp, invLerp, sign } from './math.js';
  * cannot block in the air, mid-attack, or while already being hit, and you must
  * be facing the attacker.
  */
-export function isBlocking(def, att) {
+export function isBlocking(def, att, move) {
   if (!def.blockHeld) return false;
   if (!def.grounded) return false;
   if (def.state === STATE.HITSTUN || def.state === STATE.KO) return false;
   if (def.state === STATE.ATTACK) return false;
+
   const dir = sign(att.x - def.x);
-  return dir === 0 || dir === def.facing;
+  if (dir !== 0 && dir !== def.facing) return false;
+
+  // Guard height has to match the attack's. A sweep goes under a standing
+  // guard; a high strike goes over a crouching one. MID (specials, projectiles,
+  // and anything with no height at all) is blocked by either — a move that
+  // already costs a cooldown should not also be a coin flip.
+  const guard = def.guardHeight;
+  if (!guard) return false;
+
+  const height = move?.height ?? HEIGHT.MID;
+  return height === HEIGHT.MID || height === guard;
 }
 
 /** Hitstop length in frames: 2..6, lerped by damage. Blocked hits stop less. */
@@ -54,7 +65,7 @@ export function shakeMagnitude(damage, blocked, game) {
  */
 export function applyDamage(src, def, move, game, ctx, opts = {}) {
   const c = game.combat;
-  const blocked = opts.forceUnblockable ? false : isBlocking(def, src);
+  const blocked = opts.forceUnblockable ? false : isBlocking(def, src, move);
 
   const damage = blocked ? move.dmg * c.blockChipMultiplier : move.dmg;
   const stun = Math.round(blocked ? move.stun * c.blockStunMultiplier : move.stun);
@@ -116,6 +127,11 @@ export function tryMeleeHit(att, def, game, ctx) {
   // Vertical: an attack lands if the two bodies share height. This is what lets
   // a jump clear a low-committed kick.
   if (Math.abs(att.y - def.y) > 1.05 * Math.max(att.scale, def.scale)) return false;
+
+  // A low attack travels along the floor, so it passes harmlessly under anyone
+  // who has left it. That makes jumping a real, free answer to a sweep — which
+  // is what stops low pressure from being strictly better than high.
+  if (m.height === HEIGHT.LOW && def.y > 0.35 * def.scale) return false;
 
   att.hasHit = true;
   applyDamage(att, def, m, game, ctx, { source: m.isSpecial ? 'special' : att.move });

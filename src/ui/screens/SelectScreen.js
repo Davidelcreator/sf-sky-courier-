@@ -42,6 +42,9 @@ export class SelectScreen extends Screen {
 
     this.add('p', 'hint', this.el,
       'Tap a fighter to assign it to the highlighted slot.');
+    this.add('p', 'hint', this.el,
+      'Hold BLOCK with punch or kick for the low version. Block alone crouches ' +
+      '(stops lows); block + away stands (stops highs). Guess wrong and it lands clean.');
 
     this.rebuild();
   }

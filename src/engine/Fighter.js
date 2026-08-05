@@ -29,6 +29,33 @@ export const PHASE = {
   RECOVERY: 'recovery',
 };
 
+/**
+ * Attack and guard heights.
+ *
+ * A hit only connects with a guard of the SAME height — a low sweep goes under
+ * a standing guard, a high strike goes over a crouching one. MID (specials)
+ * is blocked by either, so a special is never a coin flip.
+ *
+ * This is the entire reason low and high variants exist. Without it, "low
+ * punch" is a different animation for the same move.
+ */
+export const HEIGHT = { HIGH: 'high', LOW: 'low', MID: 'mid' };
+
+/** Fallback when a move's config omits `height`. */
+const DEFAULT_HEIGHT = {
+  punch: HEIGHT.HIGH,
+  kick: HEIGHT.HIGH,
+  lowPunch: HEIGHT.LOW,
+  lowKick: HEIGHT.LOW,
+};
+
+/** Which input buffer a move key consumes. */
+export const BASE_ACTION = {
+  punch: 'punch', lowPunch: 'punch',
+  kick: 'kick', lowKick: 'kick',
+  special: 'special',
+};
+
 export class Fighter {
   /**
    * @param {object} cfg   character config (config/characters/<id>.json)
@@ -83,10 +110,25 @@ export class Fighter {
     this.activationId = 0;
 
     this.blockHeld = false;
+    this.inputX = 0;
     this.wasGrounded = true;
   }
 
   get grounded() { return this.y <= 0.0001; }
+
+  /**
+   * Which height this fighter is currently guarding, or null if not guarding.
+   *
+   * Holding block alone crouches you into a LOW guard; holding block while
+   * pushing away from the opponent stands you up into a HIGH guard. One button
+   * and one stick, which is all the touch layout has to give.
+   */
+  get guardHeight() {
+    if (!this.blockHeld || !this.grounded) return null;
+    const back = -this.facing;
+    const pushingBack = Math.sign(this.inputX) === back && Math.abs(this.inputX) > 0.3;
+    return pushingBack ? HEIGHT.HIGH : HEIGHT.LOW;
+  }
   get alive() { return this.health > 0; }
   get isAttacking() { return this.state === STATE.ATTACK; }
   get isStunned() { return this.state === STATE.HITSTUN || this.state === STATE.BLOCKSTUN; }
@@ -146,12 +188,20 @@ export class Fighter {
         range: s.lunge?.hitRange ?? s.beam?.length ?? 0,
         knock: s.knock,
         stun: s.stun,
+        // Specials are MID: blockable by either guard, so they are never a
+        // 50/50 guess on top of already costing a cooldown.
+        height: HEIGHT.MID,
         isSpecial: true,
         special: s,
       };
     }
     const m = this.cfg.moves?.[key];
-    return m ? { ...m, isSpecial: false } : null;
+    if (!m) return null;
+    return {
+      ...m,
+      height: m.height ?? DEFAULT_HEIGHT[key] ?? HEIGHT.HIGH,
+      isSpecial: false,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -182,6 +232,7 @@ export class Fighter {
     }
 
     this.blockHeld = !!intent.block;
+    this.inputX = intent.moveX ?? 0;
 
     switch (this.state) {
       case STATE.HITSTUN:
@@ -256,10 +307,7 @@ export class Fighter {
 
     // --- attacks (ground only; committing in the air is not a prototype move)
     if (this.grounded) {
-      const wanted = intent.punch ? 'punch'
-                   : intent.kick ? 'kick'
-                   : intent.special ? 'special'
-                   : null;
+      const wanted = this._attackKeyFor(intent);
       if (wanted && this._startMove(wanted, ctx)) return;
     }
 
@@ -295,6 +343,20 @@ export class Fighter {
     if (!this.grounded) this.state = STATE.AIR;
   }
 
+  /**
+   * Pick which attack an input means. Holding block turns an attack into its
+   * low variant — no extra button, which matters because the touch layout has
+   * exactly three. A character with no low variant configured just gets the
+   * high one, so older and generated configs keep working untouched.
+   */
+  _attackKeyFor(intent) {
+    const low = !!intent.block;
+    if (intent.punch) return low && this.cfg.moves?.lowPunch ? 'lowPunch' : 'punch';
+    if (intent.kick) return low && this.cfg.moves?.lowKick ? 'lowKick' : 'kick';
+    if (intent.special) return 'special';
+    return null;
+  }
+
   /** Begin a move if it is legal. Returns true if the move started. */
   _startMove(key, ctx) {
     const data = this.moveDataFor(key);
@@ -316,7 +378,13 @@ export class Fighter {
     this.strikeParity ^= 1;
     this.activationId++;
 
-    ctx.events?.push({ type: 'startMove', fighter: this, move: key });
+    ctx.events?.push({
+      type: 'startMove',
+      fighter: this,
+      move: key,
+      // lowPunch consumes the 'punch' buffer — one press, one move.
+      action: BASE_ACTION[key] ?? key,
+    });
     return true;
   }
 

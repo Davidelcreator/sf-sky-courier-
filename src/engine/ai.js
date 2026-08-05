@@ -1,4 +1,4 @@
-import { STATE, PHASE } from './Fighter.js';
+import { STATE, PHASE, HEIGHT } from './Fighter.js';
 import { makeRandom, sign } from './math.js';
 
 /**
@@ -39,7 +39,9 @@ export class AIController {
     this.observedFrames = 0;
 
     this.attackKey = null;
+    this.attackLow = false;
     this.attackHold = 0;
+    this.guard = HEIGHT.LOW;
   }
 
   reset() {
@@ -49,7 +51,9 @@ export class AIController {
     this.observedMove = null;
     this.observedFrames = 0;
     this.attackKey = null;
+    this.attackLow = false;
     this.attackHold = 0;
+    this.guard = HEIGHT.LOW;
   }
 
   /**
@@ -76,9 +80,10 @@ export class AIController {
 
     // ---- reaction block: highest priority, overrides whatever we were doing.
     if (this._shouldReactBlock(self, foe, gap, reach)) {
+      this.guard = this._chooseGuard(foe);
       this.state = AI_STATE.BLOCK;
       this.stateFrames = 0;
-      intent.block = true;
+      this._applyGuard(intent, toFoe);
       return intent;
     }
 
@@ -93,6 +98,9 @@ export class AIController {
           if (this.attackHold > 0) {
             this.attackHold--;
             intent[this.attackKey] = true;
+            // The AI has no private path to the low variants — it holds block
+            // with the attack exactly like a player does.
+            if (this.attackLow) intent.block = true;
           } else {
             this.state = AI_STATE.APPROACH;
           }
@@ -104,7 +112,7 @@ export class AIController {
       }
 
       case AI_STATE.BLOCK:
-        intent.block = true;
+        this._applyGuard(intent, toFoe);
         if (this.stateFrames > 30) this.state = AI_STATE.APPROACH;
         break;
 
@@ -124,6 +132,31 @@ export class AIController {
     }
 
     return intent;
+  }
+
+  /**
+   * Pick a guard height against the incoming move.
+   *
+   * `guardReadChance` is the difficulty dial for the high/low mixup: at 1 the
+   * AI always guards correctly and lows become pointless, at 0 it always guesses
+   * wrong. The default sits near a coin flip so the mixup is real in both
+   * directions. MID moves are blocked by either guard, so the choice is free.
+   */
+  _chooseGuard(foe) {
+    const ai = this.game.ai;
+    const incoming = foe.moveData?.height ?? HEIGHT.MID;
+    if (incoming === HEIGHT.MID) {
+      return this.rng() < 0.5 ? HEIGHT.LOW : HEIGHT.HIGH;
+    }
+    const reads = this.rng() < (ai.guardReadChance ?? 0.5);
+    if (reads) return incoming;
+    return incoming === HEIGHT.LOW ? HEIGHT.HIGH : HEIGHT.LOW;
+  }
+
+  /** Express the chosen guard as input: block, plus back for a high guard. */
+  _applyGuard(intent, toFoe) {
+    intent.block = true;
+    if (this.guard === HEIGHT.HIGH) intent.moveX = -toFoe;
   }
 
   /** Track how long we have been able to see the opponent's current move. */
@@ -185,6 +218,7 @@ export class AIController {
       // Specials are the AI's answer to being kept at range.
       this.state = AI_STATE.ATTACK;
       this.attackKey = 'special';
+      this.attackLow = false;
       this.attackHold = 2;
       return;
     }
@@ -209,10 +243,19 @@ export class AIController {
 
     if (self.specialCooldown === 0 && this.rng() < ai.specialChance * 0.5) {
       this.attackKey = 'special';
-    } else if (gap > punchRange && gap <= kickRange) {
+      this.attackLow = false;
+      return;
+    }
+
+    if (gap > punchRange && gap <= kickRange) {
       this.attackKey = 'kick';           // only the kick reaches from here
     } else {
       this.attackKey = this.rng() < ai.kickBias ? 'kick' : 'punch';
     }
+
+    // Go low only if this character actually has the variant configured.
+    const lowKey = this.attackKey === 'kick' ? 'lowKick' : 'lowPunch';
+    this.attackLow = !!self.cfg.moves?.[lowKey] &&
+      this.rng() < (ai.lowAttackChance ?? 0.4);
   }
 }

@@ -1,4 +1,4 @@
-import { STATE, PHASE } from '../../engine/Fighter.js';
+import { STATE, PHASE, HEIGHT } from '../../engine/Fighter.js';
 import { easeOutCubic, lerp, clamp } from '../../engine/math.js';
 
 /**
@@ -60,7 +60,7 @@ const STANCE = pose({
   hipRx: 0.15, kneeR: 0.24, hipRz: -0.05,
 });
 
-const BLOCK = pose({
+const GUARD_HIGH = pose({
   bodyY: -0.10, bodyZ: -0.06,
   torsoY: 0.52, torsoX: 0.10,
   neckX: 0.12,
@@ -68,6 +68,23 @@ const BLOCK = pose({
   shRx: -0.78, elR: -2.15, shRz: -0.30,
   hipLx: -0.20, kneeL: 0.44,
   hipRx: 0.22, kneeR: 0.36,
+});
+
+/**
+ * Crouching guard. Blocks lows, eats highs.
+ *
+ * The leg angles are not decorative: hip -0.75 with knee +1.3 folds the leg so
+ * the foot lands ~0.22 below the hips, which is exactly the bodyY drop. Change
+ * one without the other and the fighter either floats or sinks through the floor.
+ */
+const GUARD_LOW = pose({
+  bodyY: -0.22, bodyZ: -0.03,
+  torsoY: 0.46, torsoX: 0.26,
+  neckX: 0.16,
+  shLx: -1.0, elL: -2.15, shLz: 0.36,
+  shRx: -0.86, elR: -2.25, shRz: -0.32,
+  hipLx: -0.75, kneeL: 1.3, hipLz: 0.12,
+  hipRx: -0.62, kneeR: 1.18, hipRz: -0.12,
 });
 
 const HITSTUN = pose({
@@ -165,6 +182,86 @@ function kickPoses(side) {
     torsoX: 0.14, torsoY: 0.06 * dir,
     [`hip${K}x`]: -0.5, [`knee${K}`]: 0.92,
     [`sh${A}x`]: -0.35, [`el${A}`]: -1.25,
+  });
+
+  return { windup, strike, follow };
+}
+
+/** Crouching jab — the fastest thing in the game, so it barely winds up. */
+function lowPunchPoses(side) {
+  const A = side;
+  const B = side === 'L' ? 'R' : 'L';
+  const dir = side === 'R' ? 1 : -1;
+
+  // Shared lower body: the crouch has to hold across all three phases, or the
+  // fighter visibly stands up mid-move and the attack stops reading as low.
+  const crouch = {
+    hipLx: -0.78, kneeL: 1.34, hipLz: 0.1,
+    hipRx: -0.64, kneeR: 1.2, hipRz: -0.1,
+  };
+
+  const windup = pose({
+    ...crouch, bodyY: -0.24, bodyZ: -0.05,
+    torsoY: -0.30 * dir, torsoX: 0.22, neckX: 0.12,
+    [`sh${A}x`]: 0.34, [`el${A}`]: -2.05, [`sh${A}z`]: dir * 0.16,
+    [`sh${B}x`]: -0.70, [`el${B}`]: -1.95,
+  });
+
+  const strike = pose({
+    ...crouch, bodyY: -0.26, bodyZ: 0.12,
+    torsoY: 0.38 * dir, torsoX: 0.20, neckY: 0.1 * dir,
+    [`sh${A}x`]: -1.30, [`el${A}`]: -0.10, [`sh${A}z`]: -dir * 0.10,
+    [`sh${B}x`]: -0.60, [`el${B}`]: -1.98,
+  });
+
+  const follow = pose({
+    ...crouch, bodyY: -0.23, bodyZ: 0.02,
+    torsoY: 0.10 * dir, torsoX: 0.22,
+    [`sh${A}x`]: -0.58, [`el${A}`]: -1.62,
+    [`sh${B}x`]: -0.66, [`el${B}`]: -1.92,
+  });
+
+  return { windup, strike, follow };
+}
+
+/**
+ * Sweep. The whole body drops so the leg can travel along the floor rather
+ * than out at hip height — hip -1.2 with knee +0.25 puts the foot ~0.15 above
+ * the ground and 0.7 units forward, which is what a sweep looks like. A fully
+ * straightened leg (hip -1.55) reads as a front kick instead.
+ */
+function lowKickPoses(side) {
+  const K = side;                        // sweeping leg
+  const S = side === 'L' ? 'R' : 'L';    // support leg, and the balancing arm
+  const dir = side === 'R' ? 1 : -1;
+
+  const windup = pose({
+    bodyY: -0.30, bodyZ: -0.06,
+    torsoX: 0.36, torsoY: -0.26 * dir,
+    [`hip${K}x`]: -0.50, [`knee${K}`]: 1.80,
+    [`hip${S}x`]: -0.90, [`knee${S}`]: 1.55,
+    [`sh${S}x`]: -0.55, [`el${S}`]: -1.45,
+    [`sh${K}x`]: -0.30, [`el${K}`]: -1.70,
+  });
+
+  const strike = pose({
+    bodyY: -0.33, bodyZ: 0.08,
+    torsoX: 0.50, torsoY: 0.30 * dir, torsoZ: -0.10 * dir,
+    neckX: -0.14,
+    [`hip${K}x`]: -1.20, [`knee${K}`]: 0.25,
+    [`hip${S}x`]: -0.95, [`knee${S}`]: 1.70,
+    // The free arm plants outward — a sweep needs a counterweight to read.
+    [`sh${S}x`]: 0.75, [`el${S}`]: -0.50, [`sh${S}z`]: -dir * 0.70,
+    [`sh${K}x`]: -0.55, [`el${K}`]: -1.40,
+  });
+
+  const follow = pose({
+    bodyY: -0.29, bodyZ: 0.0,
+    torsoX: 0.32, torsoY: 0.08 * dir,
+    [`hip${K}x`]: -0.70, [`knee${K}`]: 1.20,
+    [`hip${S}x`]: -0.85, [`knee${S}`]: 1.50,
+    [`sh${S}x`]: -0.40, [`el${S}`]: -1.40,
+    [`sh${K}x`]: -0.45, [`el${K}`]: -1.55,
   });
 
   return { windup, strike, follow };
@@ -275,7 +372,12 @@ export class PoseAnimator {
 
       case STATE.BLOCKSTUN:
       case STATE.BLOCK:
-        return { target: BLOCK, speed: 0.45 };
+        // Which guard is showing has to match which guard is being enforced,
+        // or the player cannot see what they are blocking.
+        return {
+          target: f.guardHeight === HEIGHT.HIGH ? GUARD_HIGH : GUARD_LOW,
+          speed: 0.45,
+        };
 
       case STATE.AIR:
         return { target: AIR, speed: 0.22 };
@@ -286,8 +388,22 @@ export class PoseAnimator {
         switch (f.phase) {
           case PHASE.STARTUP:
             return { target: blend(STANCE, poses.windup, t), speed: lerps.windup };
-          case PHASE.ACTIVE:
-            return { target: blend(poses.windup, poses.strike, t), speed: lerps.strike };
+
+          case PHASE.ACTIVE: {
+            // The hitbox is live from the FIRST active frame, so the strike
+            // pose has to arrive there too. Easing across the whole active
+            // window instead puts the fully-extended pose at the END of it —
+            // the limb is still travelling while the move is already hitting,
+            // which reads as a sweep that never extends. `strikeLead`
+            // compresses the ease so the pose lands early and then holds.
+            const lead = this.game.animation.strikeLead ?? 2.2;
+            const tStrike = easeOutCubic(Math.min(1, f.phaseProgress * lead));
+            return {
+              target: blend(poses.windup, poses.strike, tStrike),
+              speed: lerps.strike,
+            };
+          }
+
           default:
             return { target: blend(poses.strike, poses.follow, t), speed: lerps.recovery };
         }
@@ -306,6 +422,8 @@ export class PoseAnimator {
     const side = f.strikeParity === 0 ? 'R' : 'L';
     if (f.move === 'punch') return punchPoses(side);
     if (f.move === 'kick') return kickPoses(side);
+    if (f.move === 'lowPunch') return lowPunchPoses(side);
+    if (f.move === 'lowKick') return lowKickPoses(side);
 
     const type = f.cfg.special?.type;
     if (type === 'lunge') return lungePoses();

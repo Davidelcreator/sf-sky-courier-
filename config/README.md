@@ -37,8 +37,18 @@ That is the whole process — the engine contains zero character-specific logic.
   "moves": {
     // Frame data is the contract. startup → active → recovery, in 60Hz frames.
     // The hitbox only exists during `active`; you are helpless during `recovery`.
-    "punch": { "dmg": 6, "startup": 4, "active": 3, "recovery": 8, "range": 1.15, "knock": 0.09, "stun": 12 },
-    "kick":  { "dmg": 10, "startup": 7, "active": 4, "recovery": 14, "range": 1.5, "knock": 0.16, "stun": 18 }
+    //
+    // "height" decides which guard stops the move: a LOW attack is blocked only
+    // by a crouching guard, a HIGH attack only by a standing one. That is the
+    // entire reason low variants exist — without it they are a second animation
+    // for the same move. Omit it and a move defaults to HIGH.
+    "punch":    { "height": "high", "dmg": 6,  "startup": 4, "active": 3, "recovery": 8,  "range": 1.15, "knock": 0.09, "stun": 12 },
+    "kick":     { "height": "high", "dmg": 10, "startup": 7, "active": 4, "recovery": 14, "range": 1.5,  "knock": 0.16, "stun": 18 },
+
+    // Optional. Input as block + the matching button; a character without them
+    // simply gets the high version, so older configs keep working.
+    "lowPunch": { "height": "low",  "dmg": 4,  "startup": 3, "active": 3, "recovery": 9,  "range": 1.05, "knock": 0.03, "stun": 11 },
+    "lowKick":  { "height": "low",  "dmg": 8,  "startup": 9, "active": 4, "recovery": 20, "range": 1.6,  "knock": 0.13, "stun": 18 }
   },
 
   "special": {
@@ -62,6 +72,30 @@ That is the whole process — the engine contains zero character-specific logic.
   "boneMap": { "Hips": "mixamorigHips" }   // target bone → source bone, for retargeting
 }
 ```
+
+### Attack heights
+
+Four normals, two heights, and a guard that is also a height:
+
+| | crouching guard | standing guard |
+| ------------- | --------------- | -------------- |
+| **low** attack  | blocked | **clean hit** |
+| **high** attack | **clean hit** | blocked |
+| **mid** (specials, projectiles) | blocked | blocked |
+
+The defender picks a guard height with the stick — block alone crouches, block
+plus away stands — so every attack is a genuine guess. Two rules keep it from
+degenerating:
+
+- **Specials are MID.** They already cost a cooldown; making them a coin flip
+  too would be punishing twice.
+- **Lows pass under an airborne opponent.** Jumping beats a sweep outright,
+  which is what stops low pressure from being strictly better than high.
+
+Balance the pair against each other, not in isolation. A low attack should be
+worse in damage and better in either speed (`lowPunch`) or reach (`lowKick`),
+and `lowKick` should be the most punishable move in the kit — a sweep that is
+safe on block has no counterplay.
 
 ### Tuning notes
 

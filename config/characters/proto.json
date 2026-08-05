@@ -19,8 +19,11 @@
   "scale": 1.0,
 
   "moves": {
-    "punch": { "dmg": 7,  "startup": 5, "active": 3, "recovery": 9,  "range": 1.2,  "knock": 0.1,  "stun": 13 },
-    "kick":  { "dmg": 11, "startup": 8, "active": 4, "recovery": 15, "range": 1.52, "knock": 0.17, "stun": 19 }
+    "punch":    { "height": "high", "dmg": 7,  "startup": 5, "active": 3, "recovery": 9,  "range": 1.2,  "knock": 0.1,  "stun": 13 },
+    "kick":     { "height": "high", "dmg": 11, "startup": 8, "active": 4, "recovery": 15, "range": 1.52, "knock": 0.17, "stun": 19 },
+
+    "lowPunch": { "height": "low",  "dmg": 5,  "startup": 4, "active": 3, "recovery": 10, "range": 1.1,  "knock": 0.05, "stun": 12 },
+    "lowKick":  { "height": "low",  "dmg": 9,  "startup": 9, "active": 4, "recovery": 19, "range": 1.62, "knock": 0.14, "stun": 18 }
   },
 
   "special": {
