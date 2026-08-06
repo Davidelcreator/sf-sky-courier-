@@ -67,11 +67,37 @@ That is the whole process — the engine contains zero character-specific logic.
     "beam":       { "length": 6.0, "activeFrames": 14, "thickness": 0.35, "color": "#9ad6ff" }
   },
 
+  // Optional. Picks a built-in skeleton preset: "humanoid" (default) or "dino".
+  // A body type supplies proportions, a resting posture, extra parts (a tail),
+  // and a head shape — but keeps the SAME joint names, so it animates from the
+  // same pose set as everyone else with no engine or animator change.
+  "bodyType": "dino",
+
   // Optional. Without it you get the procedural rig.
   "model": "/models/humanoid.glb",
   "boneMap": { "Hips": "mixamorigHips" }   // target bone → source bone, for retargeting
 }
 ```
+
+### Body types
+
+| `bodyType` | Shape |
+| ---------- | ----- |
+| `humanoid` | the default box fighter |
+| `dino`     | theropod: forward-pitched body, counterweight tail, hinged jaw, digitigrade legs, tiny arms |
+
+Add one in `BODY_TYPES` in `src/characters/rig/ProceduralRig.js`. A preset is
+data — limb lengths, radii, a `spinePitch`, a `neckPitch`, an optional `tail`,
+a head style, and a `rest` block of permanent joint offsets (a dinosaur's
+never-straight legs live there rather than in every pose).
+
+Two structural details make this work without touching the animator:
+
+- `spineBase` and `neckBase` hold the static posture. PoseAnimator *assigns*
+  `torso.rotation` rather than adding to it, so a rest pitch written there
+  would be erased on the first frame; it lives on a parent group instead.
+- `rest` offsets are added to the pose on the way out, so a body type can hold
+  a stance the shared poses know nothing about.
 
 ### Attack heights
 

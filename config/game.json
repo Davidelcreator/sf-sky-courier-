@@ -121,5 +121,5 @@
     "projectileTrailLength": 8
   },
 
-  "roster": ["blaze", "titan", "proto"]
+  "roster": ["blaze", "titan", "proto", "dyno"]
 }

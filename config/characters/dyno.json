@@ -1,0 +1,45 @@
+{
+  "$comment": "Theropod. `bodyType` picks a whole skeleton preset from ProceduralRig — proportions, resting posture, a tail, and a hinged jaw — while keeping the same joint names, so it animates from the exact same pose set as everyone else. Its identity is REACH: the tail gives it the longest normals in the roster, paid for with the slowest startup and the worst recovery.",
+
+  "id": "dyno",
+  "name": "DYNO",
+  "tagline": "Jaws, tail, and a very long reach",
+
+  "bodyType": "dino",
+
+  "color": "#4a9d5f",
+  "accent": "#ffcf4d",
+  "skin": "#86cf95",
+
+  "health": 115,
+  "speed": 0.07,
+  "jumpV": 0.3,
+  "weight": 1.25,
+  "scale": 1.08,
+
+  "moves": {
+    "punch":    { "height": "high", "dmg": 8,  "startup": 6,  "active": 4, "recovery": 11, "range": 1.3,  "knock": 0.09, "stun": 16, "$name": "Bite" },
+    "kick":     { "height": "high", "dmg": 11, "startup": 9,  "active": 5, "recovery": 16, "range": 1.72, "knock": 0.15, "stun": 20, "$name": "Tail whip" },
+
+    "lowPunch": { "height": "low",  "dmg": 5,  "startup": 4,  "active": 3, "recovery": 10, "range": 1.12, "knock": 0.04, "stun": 12, "$name": "Claw" },
+    "lowKick":  { "height": "low",  "dmg": 10, "startup": 10, "active": 5, "recovery": 23, "range": 1.9,  "knock": 0.15, "stun": 19, "$name": "Tail sweep" }
+  },
+
+  "special": {
+    "name": "SONIC ROAR",
+    "type": "projectile",
+    "dmg": 15,
+    "startup": 11,
+    "recovery": 24,
+    "cooldown": 195,
+    "stun": 24,
+    "knock": 0.26,
+    "projectile": {
+      "speed": 0.14,
+      "life": 140,
+      "radius": 0.42,
+      "height": 1.15,
+      "color": "#ffcf4d"
+    }
+  }
+}

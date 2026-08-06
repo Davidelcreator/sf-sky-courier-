@@ -57,15 +57,16 @@ character table is still unknown**:
 | Pose constants + per-phase lerp rates | `PoseAnimator.js`, `animation.phaseLerp` | The actual feel of every strike |
 | Camera, AI, chip/blockstun multipliers, combo window, round/timer | `game.json` | Balance and framing |
 
-### ❓ Two decisions waiting on you
+### ❓ One decision waiting on you
 
-1. **The roster is 4, not 2.** The prototype also has `sketch` (featherweight,
-   ink projectile) and `shirty` (Spin Cycle projectile). `sketch` arrived
-   complete; `shirty` is cut off mid-kick. Neither is in this repo yet.
-2. **`bodyType` is not implemented.** `sketch` declares `bodyType: "stick"` and
-   `shirty` declares `"shirt"` — the prototype's rig builds more than one body
-   shape. `ProceduralRig` builds one. Adding them means two more rig variants;
-   until then those two would render as the default box fighter.
+**The prototype's roster is 4, not 2.** It also has `sketch` (featherweight,
+ink projectile) and `shirty` (Spin Cycle projectile). `sketch` arrived complete;
+`shirty` is cut off mid-kick. Neither is in this repo yet.
+
+`bodyType` — which those two need, declaring `"stick"` and `"shirt"` — **is now
+implemented**, built out to add DYNO. `BODY_TYPES` in `ProceduralRig.js` holds
+`humanoid` and `dino`; adding `stick` and `shirt` is now writing two data
+presets rather than reworking the rig.
 
 ### Judgement calls the spec did not settle
 
@@ -194,6 +195,13 @@ That is the entire process. The engine contains zero character-specific logic �
 no name, no switch, nothing. Add `"model": "/models/whatever.glb"` and it loads
 the model and retargets the shared clip set onto it instead of using the box rig.
 
+`"bodyType"` picks a built-in skeleton preset instead — `humanoid` (default) or
+`dino`, which is a forward-pitched theropod with a counterweight tail, a hinged
+jaw, digitigrade legs and the famous tiny arms. A body type changes proportions,
+posture and parts but keeps the same joint names, so **it animates from exactly
+the same pose set as everyone else** — no engine or animator change. See
+`BODY_TYPES` in `src/characters/rig/ProceduralRig.js`.
+
 ---
 
 ## Architecture map
@@ -225,7 +233,7 @@ src/
     CharacterLoader.js      config -> fightable character; the animation ladder
     AnimationLibrary.js     loads + caches the shared clip set
     rig/
-      ProceduralRig.js      the box fighter, two-segment limbs
+      ProceduralRig.js      the procedural fighters + body-type presets
       PoseAnimator.js       the phased poser (windup -> strike -> follow-through)
       SkeletonPoseTarget.js runs that poser on ANY humanoid GLB skeleton
       ClipAnimator.js       plays retargeted clips, time-scaled to frame data
