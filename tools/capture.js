@@ -19,7 +19,7 @@ const path = require('path');
 const puppeteer = require('puppeteer-core');
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const BASE_URL = 'http://localhost:8080/';
+const BASE_URL = process.env.BASE || 'http://localhost:8080/';
 const OUT_DIR = path.join(__dirname, '..', 'shots');
 
 const outName = process.argv[2] || 'current';
