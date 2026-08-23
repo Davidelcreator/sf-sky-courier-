@@ -44,6 +44,7 @@ const N = {
   refLng: null, refLat: null,
   rand: Math.random,    // swapped for a seeded generator in shot mode
   shot: null,           // ?npcshot lineup mode (deterministic screenshots)
+  quiet: false,         // plain ?shot=1: keep the crowd empty (see initNPCs)
   maxOverride: null,    // ?npcmax=N crowd-size override (FPS testing)
   spawnCursor: 0,
   frame: 0,
@@ -717,6 +718,14 @@ export async function initNPCs(context) {
   // Shot mode? (?npcshot=1 → deterministic archetype lineup for captures)
   const q = new URLSearchParams(window.location.search);
   if (q.has('npcmax')) N.maxOverride = Math.max(0, parseInt(q.get('npcmax'), 10) || 0);
+  // A plain ?shot=1 capture has to be pixel-identical run to run — the
+  // visual-style A/B loop diffs consecutive shots, so any drift reads as
+  // a change we made. Wandering NPCs are exactly as unrepeatable as
+  // traffic (random spawn points AND real-clock walking), and shot mode
+  // already skips traffic for that reason. So the crowd stays empty
+  // unless a capture asks for it explicitly: ?npcmax=N or ?npcshot=…
+  // both still work and are the way to shoot NPCs deliberately.
+  N.quiet = q.has('shot') && !q.has('npcmax') && !q.has('npcshot');
   if (q.has('npcshot')) {
     // ?npcshot=<archetype id> shoots 6 characters of one archetype;
     // anything else (?npcshot=1) lines up all 8 archetypes.
@@ -837,6 +846,7 @@ export function updateNPCs(dt, nowMs) {
   // ?npcmax=N overrides the crowd size — the FPS harness A/Bs with it
   // (npcmax=0 measures the game with the NPC system idle).
   const target = N.maxOverride !== null ? N.maxOverride
+    : N.quiet ? 0
     : Math.round((ctx.gfx().npcMax || 0) * NPCS.DENSITY);
   // spawn gently (a couple per frame) so a quality change doesn't hitch
   let attempts = 0;

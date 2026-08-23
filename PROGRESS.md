@@ -155,3 +155,69 @@ David's go-ahead). Notably `sunPolar 50` (=40 deg elevation) needs NO change
 
 No FPS numbers this entry: nothing was changed, so there is nothing to
 measure. Baseline FPS will be taken at the start of STEP 4.
+
+## STEP 3 — capture-loop determinism (feature/visual-style, 2026-08-22)
+
+**Verdict: the loop was NOT deterministic. Fixed before any visual change.**
+
+Measured by capturing repeatedly at the standard shot camera and diffing
+pixel-for-pixel (`?shot=1`, port 8082 serving this worktree).
+
+| | before fix | after fix |
+|---|---|---|
+| PSNR between runs | **41.9 dB** | **83–inf dB** (median 107.8) |
+| pixels differing | 1,602 (0.174%) | 1–115 (max 0.0125%) |
+| **max channel delta** | **141 / 255** | **6 / 255** |
+
+### Cause: NPCs walk during shot mode
+
+`?shot=1` already skipped traffic ("traffic is random — skip it in shot
+mode") but still ran the full NPC crowd: 24 pedestrians spawning from an
+UNSEEDED `Math.random` and then walking on real wall-clock `dt`. Two
+captures put them in visibly different places — that was the 141/255.
+The `?npcshot` lineup mode was already pixel-stable (it pins every frame);
+plain `?shot=1` never got that treatment.
+
+**Fix** (`js/npcs.js`, 3 lines): plain `?shot=1` now holds the crowd at
+zero, exactly as it already does for traffic. `?npcmax=N` and
+`?npcshot=…` still work and are the deliberate way to shoot NPCs.
+
+Regression-checked, all clean, zero page errors:
+- play mode (no `?shot`): **24 NPCs** spawn as before, `quiet=false`
+- `?shot=1&npcmax=12`: **12 NPCs**, override respected
+- `?npcshot=1`: 8-archetype lineup still captures correctly
+
+### Residual noise floor: 6/255 on 114 distant pixels — accepted, not chased
+
+One run in ~5–6 differs from the rest by **≤6/255 across ~114 pixels**
+(0.0125%), always sub-pixel anti-aliasing on distant building edges around
+y 230–280, averaging **1.19/255** — invisible. The other runs are
+identical to within ±1/255, and two runs came out bit-identical.
+
+I tried `raster-fade-duration: 0` in shot mode on the theory that raster
+cross-fade was the cause. **It made no measurable difference** (outlier
+still ≤6/255 on ~115 px, before and after), so it was **reverted** rather
+than kept as an unproven change. `js/main.js` is untouched.
+
+**Treat 6/255 / 115 px as the noise floor.** Any A/B verdict in STEP 4
+must clear it — which is trivial, since a grade or sky change moves
+tens of thousands of pixels by tens of units.
+
+### Baseline FPS (real GPU: RX 5700 XT via ANGLE D3D11, headless 1280x720)
+
+| condition | fps |
+|---|---|
+| shot camera, 0 NPCs (what plain `?shot=1` now measures) | **34.9** |
+| shot camera, 24 NPCs (`?npcmax=24`, play-representative) | **31.8** |
+
+Two caveats, stated up front:
+1. **The NPC fix changed what `fps.js` measures.** It loads `?shot=1`, so
+   it now sees an empty crowd. For play-representative numbers use
+   `node tools/fps.js "npcmax=24" http://localhost:8082/`. Older FPS
+   figures in this file included NPCs and are NOT directly comparable.
+2. This is **not** 60 fps, and it is below the ~42 fps this file recorded
+   historically. Absolute readings on this machine drift ±25% with load,
+   so a single number proves nothing — STEP 4 will A/B alternate against
+   a baseline in the same batch rather than trust absolutes. Flagged for
+   David: the 60 fps bar in the brief is not currently met at this camera,
+   independently of any visual work.
