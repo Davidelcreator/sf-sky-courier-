@@ -242,3 +242,33 @@ towers #636361 sat 0.025).
 | A1 | Film grain `grainOpacity 0.25 → 0.05` (STYLE.md §4: reference flat-area high-pass sigma is 0.02–0.24/255; the old "sigma 2–3" figure was measuring water ripples and pavement texture, not noise) | `a1_grain.png` | 35.9 (base 34.9 — within the ±25% drift noise; it is a CSS opacity, no draw-call change) | **KEEP, but barely visible — and my GAP ranking was wrong.** The change is real and broad: it moved **67.65% of all pixels**, but by a **max of 2/255** (mean 0.78). PNG dropped 954→658 KB, which is the honest tell: removing ±1 of dither compresses far better. Directionally correct — we were adding roughly 5× the fine noise the footage has, and now we are inside the measured band. But at 2/255 it is **below the perceptual threshold**, so nobody will see it. I ranked this "High impact" in GAP.md on the strength of the old sigma 2–3 figure being wrong by 5×; what I missed is that the *effect itself* was always tiny, so correcting it is a correctness win, not a visual one. GAP.md A1 impact rating should read **low**. |
 | A2 | Water hue `waterDeep #7d8b93 → warm-neutral` (STYLE.md §1.6: reference water is B−R **−6 to −37**, sat 0.065–0.300; the shot measured B−R **+106**, sat 0.549) | — no shot, change never made | — | **NOT ATTEMPTED — the knob does not control what I measured.** Diagnostic: forcing `uDeep`/`uShallow` to magenta **and** hiding the water plane outright left the far-water region **byte-identical** (rgb 84.6,131.2,190.4 in all three). The three.js plane is only visible in `x[0..466] y[173..719]` — the *near* water — and there it already measures `#b3bbb0`, sat 0.065, B−R −3, i.e. **already on the reference hue**, just light. So the huge blue mass driving my "biggest gap" call is something else. Ruled out by direct test: satellite raster (hiding it changes only `y[193..719]`), `natural_earth` (3 px), every vector fill (`fillLayersVisible` is empty), the `background` layer (already `visibility:none`), and `queryRenderedFeatures` returns `[]` there. Remaining suspect is MapLibre's own terrain/atmosphere render over sub-sea-level bathymetry. **Unresolved — raised at check-in.** |
 | A4 | Lane paint `MARKING_BRIGHTNESS 0.85 → 0.55` (STYLE.md §5: reference paint is 1.14–1.65× asphalt; ours measured **1.81×**) | `a4_paint.png` | — | **REVERTED — no measurable effect.** Paint/asphalt ratio went **1.81× → 1.82×**. `MARKING_BRIGHTNESS` *is* wired up (main.js:401 for the vector marking layers, 1711/2231 for ROADS3D), and the four `lane-*` layers report `visibility:visible` — but in the default satellite basemap the bright lines I sampled are not those layers. Reverted rather than kept as an unproven edit. **Needs a proper vector-basemap capture to evaluate** (my satellite-off probe only hid the raster; it did not re-show the vector fills, so it was not a real vector-mode test). |
+
+### Tier B answered from the baseline capture (GAP.md B1–B5)
+
+Measured on `a1_grain.png` with the **identical method** used on the
+reference in STYLE.md §4. (First attempt used linear luminance against
+the reference's gamma-space luma — not comparable. Caught and redone;
+the numbers below are gamma-space both sides.)
+
+| | game | reference target | verdict |
+|---|---|---|---|
+| **B1** global saturation | **0.080** | 0.076–0.247 (mean 0.157) | **IN BAND — at the very bottom.** We are already as desaturated as the least-saturated reference frame. **Do not desaturate further**; `gradeSaturate 0.72` may already be slightly too aggressive. This kills the "desaturate the basemap" idea before it cost anything. |
+| **B2** black floor (Y p01) | **60.8** | 21–72 | **IN BAND** (near the top — blacks well lifted). No change needed. |
+| **B3** midtone (Y p50) | **104.6** | 135–185 | **BELOW.** I distrusted this at first as a scene-composition artefact (street-level photos vs a pitched aerial view), so I checked it a second way — material-by-material — and the two agree. It is real. |
+
+**Material-matched (the trustworthy comparison), game vs reference:**
+
+| material | game | reference | gap |
+|---|---|---|---|
+| distant towers | `#636261` R~99, sat 0.025 | `#a2afc0`/`#b1b6ba` R~162–177, sat 0.064–0.169 | **~65–78 too dark** — the single biggest gap. Distant buildings should wash toward the bright sky; ours stay dark. This is **B4 aerial perspective**, and it is very visible. |
+| near buildings | `#6e6b60` R~111, sat 0.131 | `#948b7c`…`#8d8375` R~132–148, sat ~0.20 | ~20–37 too dark |
+| asphalt | `#555657` R~85, sat 0.064, B−R **+2.5** | R~94–121, sat 0.130–0.282, B−R **+15…+36** | too dark, too flat, **not sky-blue** — reference roads mostly reflect sky |
+| foliage (distant) | `#70756c` sat **0.115** | hazed `#9c9a93`/`#88908a` sat 0.107–0.139 | **saturation is CORRECT** for hazed distance — so **A8 cannot be judged here**; the only trees in frame are far and fogged |
+| sky near horizon | `#c7cdd6` R~200, sat 0.079 | `#979ea2`/`#b0c2da` R~151–176 | game sky is **brighter** than reference |
+
+**Captures still needed** (per David's instruction to propose before building):
+- **B4 / aerial perspective** — answerable *now* from the standard shot; no new capture needed. Biggest measured gap, and `fogColor`/`atmosphereBlend`/`fogGroundBlend` are existing sliders. Proposed next item.
+- **A3 sky zenith + A7 horizon** — the standard camera is pitched 72° (≈18° above horizontal), so it sees **only near-horizon sky**. Needs a shot with a raised camera, e.g. `?shot=1&pitch=35&alt=400`, to put real zenith in frame.
+- **A8 foliage saturation** — needs a **near-tree** capture (a park spot: Palace of Fine Arts or GG Park) so foliage is unfogged.
+- **A4 lane paint** — needs a genuine **vector-basemap** capture (`setBasemap(false)`, not just hiding the raster).
+- **B5 facade window contrast** — needs a close building crop; the standard shot's towers are too distant.
