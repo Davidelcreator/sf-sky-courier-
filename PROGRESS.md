@@ -78,3 +78,80 @@ Every step: change → `npm run shot` (launch check + capture) → judge vs
 | Behavior | wander along road edges, idle, archetype flavor anims, vehicle-scare react (step back + emote when a moving vehicle enters 9 m) — verified end to end headless. No ragdolls, no NPC-vehicle damage (per contract) | headless react run |
 | NPC count vs FPS | tools/fps.js A/B (real GPU RX 5700 XT, q=high, downtown cam, 3 alternating rounds): **0 NPCs 42.1 / 24 NPCs 40.3 / 40 NPCs 38.3 / 60 NPCs 36.9 avg fps** ≈ 0.09 fps per NPC. Caps set to hold the 40 floor: high 24, medium 16, low 8. NPCS.DENSITY dial (P panel) scales them; ?npcmax=N overrides for testing | this table |
 | Server fix | the "dev server dies silently" mystery: client aborts (headless Chrome closing mid-download) raised unhandled stream errors that killed node. server.js now survives them | server.js |
+
+## Visual style, pass 2 — re-measure of ref/ (feature/visual-style, 2026-08-22)
+
+STEP 1+2 only: analysis and audit. No code touched, no visual change made.
+STYLE.md and GAP.md superseded in place (old text preserved in git history
+at 0df0e30).
+
+### Headline finding: the reference set was never replaced
+
+The brief assumed STYLE.md/GAP.md came from an earlier reference set. They
+did not. `ref/` holds the same 12 frames the 2026-07-16 pass measured —
+file mtimes `2026-07-14 22:40`, two days BEFORE the old STYLE.md, and the
+old doc's own scene list and frame numbers match these files exactly. The
+second set `ref2/` (17 `ferry_*`/`misc_*` frames, 2026-07-16) is what
+DETAIL_GAP.md / TEXTURE_GAP.md were built from. Raised at check-in; if
+"new reference set" meant ref2/, this pass should be redone against those.
+
+Value delivered is therefore *the same frames measured properly*, not new
+frames. Six corrections to the old numbers — see STYLE.md §0.2. The largest:
+grain overstated ~5x (σ 2–3 claimed vs 0.02–0.86 measured), sun:shade
+understated (1.7:1 vs 2.27:1), sky zenith mislabelled (old value was
+mid-sky), facade contrast understated (10–15 units claimed vs 83–135).
+
+### Method notes (so the numbers are auditable)
+
+- Overlays masked, not eyeballed: scene content is `x 52–1850, y 29–1022`;
+  presenter PiP `x>=1355, y>=526`; caption `x 600–1345, y 928–1022`; racing
+  HUD on 015/027/043; video transport UI on 027/043/051.
+- Regions were hand-picked, then **audited crop-by-crop against their own
+  label**. The first attempt had six contaminated boxes (015 "palm" was a
+  building facade; 051 "water" was the scooter; 060 "sky" was a building;
+  111 "path" included the runner). All re-picked before any number was
+  taken. Two foliage boxes (051 foliage_tree_dark, 060 foliage_tree) could
+  not be cleaned and were **dropped rather than reported**.
+- Lighting maths in linear light. The sun/ambient ratio is taken as a
+  ratio on ONE surface so albedo cancels; the CCT figures use near-neutral
+  surfaces and are flagged as assumption-dependent.
+- Two measurements were run, judged confounded, and discarded rather than
+  reported as findings: contrast-vs-depth (measured scene content, not
+  haze) and vignette (inseparable from the sky's own zenith gradient).
+
+### Sample regions (original 1920x1080 pixel boxes, x0,y0,x1,y1)
+
+| Frame | Region | Box |
+|---|---|---|
+| 015 | sky_upper / horizon_haze | 620,120,1000,300 / 640,430,1000,485 |
+| 015 | asphalt_near / asphalt_far | 150,700,600,880 / 640,520,900,570 |
+| 015 | building_white_tower / foliage_palm | 90,130,330,420 / 1370,60,1530,230 |
+| 027 | asphalt_near / sky_upper / building_far | 250,720,700,900 / 500,160,900,340 / 1080,170,1260,330 |
+| 043 | asphalt_near / sky_upper | 200,700,650,880 / 500,150,850,320 |
+| 051 | grass / water_lake / stone_building / sky | 80,600,550,880 / 450,340,1150,440 / 80,80,340,240 / 1150,40,1650,130 |
+| 060 | water_lake / stone_rotunda / sky | 350,430,1250,700 / 620,60,980,240 / 1350,30,1750,110 |
+| 066 | path_concrete / grass_sun / foliage_willow / sky | 380,780,700,950 / 80,520,480,780 / 120,60,480,280 / 880,40,1080,120 |
+| 080 | plaza_pavement / facade_stone / sky | 220,760,800,940 / 120,320,500,600 / 900,70,1300,300 |
+| 088 | sky_cloud / facade_shade / plaza_sun | 760,50,1250,200 / 90,300,380,520 / 170,780,560,930 |
+| 088 | foliage_palm / distant_bridge | 1420,300,1750,470 / 880,415,1180,455 |
+| 093 | stone_facade / sky_upper / plaza_pavement | 220,320,900,700 / 1480,40,1800,180 / 150,870,800,990 |
+| 111 | sky_zenith / skyline_far / path_sun | 130,40,620,150 / 1350,90,1800,270 / 420,720,800,930 |
+| 111 | **path_shadow** (the sun:ambient pair) / foliage_sun | 1020,840,1130,930 / 220,290,650,430 |
+| 124 | path_sun / skyline_far / foliage_sun | 620,730,1050,930 / 700,70,1250,300 / 1150,330,1330,520 |
+| 137 | sky / skyline_far / water / foliage / building | 400,60,1000,290 / 880,380,1250,470 / 350,690,900,930 / 1450,440,1800,510 / 100,300,300,430 |
+
+Sky-gradient samples (111, 137, 088) use fixed-x columns at five heights —
+listed in STYLE.md §1.1 / §3.
+
+### Audit result
+
+Current `LOOK` config is much closer to the reference than the old GAP.md
+implies, because steps 1–4 of that plan already shipped. Remaining gaps
+ranked in GAP.md: 8 config-only changes (tier A), 5 that cannot be judged
+without a measured capture (tier B, first job of STEP 3), 2 moderate (tier
+C), and the unchanged expensive list (tier D, not to be started without
+David's go-ahead). Notably `sunPolar 50` (=40 deg elevation) needs NO change
+— the frames only support a 35–55 deg band and we are already inside it.
+
+No FPS numbers this entry: nothing was changed, so there is nothing to
+measure. Baseline FPS will be taken at the start of STEP 4.

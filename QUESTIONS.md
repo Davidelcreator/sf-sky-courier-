@@ -67,3 +67,57 @@ into three.js.
   to DISTRICTS if anyone ever flies 60 km north.
 - **NPCs don't avoid each other or lamp posts** (no NPC-NPC collision) —
   v1 scope cut, matches the brief.
+
+## Visual style pass 2 (2026-08-22) — two calls made to avoid stalling
+
+### 1. Every reference frame contains a presenter. I masked instead of discarding.
+
+The brief says: "If any frame shows a presenter, UI, slides, or a maps
+interface, ignore that frame and tell me which one so I can delete it."
+
+Taken literally that discards **all 12 frames** and leaves nothing to
+analyse. Every frame in `ref/` carries a presenter webcam PiP in the
+bottom-right (`x>=1355, y>=526`) plus a "Genie 3 / Created using Google
+Street View imagery" caption, and every frame sits inside a video-editor
+canvas with a timeline ruler down the right edge.
+
+**Decision:** kept all 12 and masked the overlays programmatically rather
+than discarding the set, because the scene area outside the overlays is
+clean and is 60–72% of each frame. Masks are documented in STYLE.md §7 and
+were visually verified before any sampling.
+
+**Per-frame overlay inventory, so you can decide:**
+
+| Frames | Overlays present |
+|---|---|
+| all 12 | presenter PiP, Genie 3 caption, editor timeline ruler, letterbox |
+| 015, 027, 043 | + racing HUD (speed, lap counter, speedometer) **and a "Google Maps" logo on the car** |
+| 027, 043, 051 | + video transport UI (pause, scrubber, timecode) |
+| 027, 051 | + mouse cursor |
+
+If you want frames actually deleted, 015/027/043 are the strongest
+candidates: they carry the most overlay area AND visible third-party
+branding. Cost of losing them: they are 3 of the 5 bright-overcast frames
+and the only ones showing a **road surface from a driving camera** — the
+most directly relevant material in the set for this game. I would keep
+them, masked.
+
+### 2. `ref/` is NOT a new reference set — the old docs measured these same frames.
+
+The brief said STYLE.md/GAP.md were "from an earlier reference set". They
+are from *this* set. Evidence in STYLE.md §0.1 and PROGRESS.md. There is a
+second set `ref2/` (17 frames, 2026-07-16) behind DETAIL_GAP.md and
+TEXTURE_GAP.md.
+
+**Decision:** analysed `ref/` as literally instructed. If "the new
+reference set" meant `ref2/`, or if new frames were meant to be dropped in
+and never were, this pass should be re-run — the measurement harness is
+built and re-running against a different folder is cheap.
+
+### 3. Content rule noted for STEP 4
+
+The reference contains identifiable real-world locations (Palace of Fine
+Arts, SF Ferry Building, the Las Vegas strip incl. a Paris-casino Eiffel
+replica) and third-party branding (Google Maps livery). Per the brief we
+chase the aesthetic only — no reproduction of these locations, signage,
+logos or branding in the game. Recorded here so it survives into STEP 4.
