@@ -341,3 +341,66 @@ over-saturated blue band (sat up to 0.508 — *more* saturated than anything
 in the entire reference set, whose ceiling is 0.341). That band is the same
 unidentified blue from the A2 investigation, now seen full-width. Fixing
 the sky colour alone will not help while the seam is there.
+
+### The blue band identified: `style.css:17`, the `html, body` CSS gradient
+
+Not a layer. Not MapLibre at all.
+
+```css
+html, body {
+  /* Sky trick: MapLibre leaves the area above the horizon transparent,
+     so this gradient shows through and becomes the sky when you fly. */
+  background: linear-gradient(#3d6fb5 0%, #7db3e8 45%, #cfe6f7 100%);
+}
+#map { background: transparent; }
+```
+
+**Bisect trail (each step ruled out by direct test, in the sky preset):**
+
+| knocked out | band |
+|---|---|
+| all **93** style layers | unchanged |
+| + terrain (`setTerrain(null)`) | unchanged |
+| + the entire three.js scene | unchanged |
+| `sky-color` → red | unchanged (the pale top DID turn red) |
+| `horizon-color` → red | unchanged (pale top tinted) |
+| `fog-color` → red | unchanged |
+| all three sky stops → red | unchanged |
+
+The knockouts were verified to be repainting, not stale: hiding all layers
+moved **52.9%** of pixels and hiding the three.js scene moved **51.6%** —
+the band simply survived every one of them, byte-identical at
+rgb(114.8, 168.1, 223.8).
+
+**Confirmation by prediction, not inference.** Evaluating that CSS gradient
+at the band's centre line (y=272 of 720) gives **rgb(114.7, 168.1, 223.8)**
+against a measured **rgb(114.8, 168.1, 223.8)** — a delta of **0.1, 0.0,
+0.0**. It is the gradient.
+
+**Two structural consequences:**
+
+1. **It bypasses the entire colour grade.** `main.js:623` applies the grade
+   as `canvas.style.filter = saturate(...) contrast(...) brightness(...)`,
+   i.e. to the **canvas element only**. The gradient is painted on
+   `html, body`, *behind* the canvas, so `gradeSaturate 0.72` never touches
+   it. That is exactly why it measures sat **0.487–0.549** while every
+   rendered surface grades down to ~0.08 — it is the one thing on screen
+   the pass has no control over, and the most out-of-band element measured
+   against a reference whose ceiling is 0.341.
+2. **It is legacy and now redundant.** Its own comment calls it a "sky
+   trick" for when "MapLibre leaves the area above the horizon
+   transparent" — written before this project adopted `map.setSky()`. We
+   now have a real sky, drawn over the top portion of it. The hard seam at
+   y≈188 is precisely where the real sky ends and the leftover trick
+   shows through.
+
+**Also explains the A2 dead end.** In the `main` preset the same gradient
+shows through where the canvas is transparent past the drawn scene — which
+is why recolouring `waterDeep`, hiding the water plane, hiding the
+satellite raster and hiding `natural_earth` all failed to move it. (The
+main-preset numbers are a partial blend rather than the pure gradient —
+predicted rgb(79.2,130.3,195.5) vs measured rgb(84.6,131.2,190.4) — so
+there the canvas is partly drawn over it, unlike the clean sky-preset case.)
+
+**No fix proposed here** — reporting the name and the measurements first,
+as instructed.
