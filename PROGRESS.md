@@ -272,3 +272,21 @@ the numbers below are gamma-space both sides.)
 - **A8 foliage saturation** — needs a **near-tree** capture (a park spot: Palace of Fine Arts or GG Park) so foliage is unfogged.
 - **A4 lane paint** — needs a genuine **vector-basemap** capture (`setBasemap(false)`, not just hiding the raster).
 - **B5 facade window contrast** — needs a close building crop; the standard shot's towers are too distant.
+
+### FPS: reference number and the amended rule (David's ruling, 2026-08-23)
+
+**Reference FPS for this pass: `34.9`** (shot camera, 0 NPCs, RX 5700 XT
+via ANGLE D3D11, headless 1280x720). Play-representative companion figure
+is 31.8 at `?npcmax=24`.
+
+**Rule for every accepted visual change: it may not cost more than
+1 fps against 34.9.** Anything worse gets the cheap version or gets
+reverted.
+
+The 60 fps figure in the original brief was aspiration, not measurement.
+The 34.9 → 60 gap, and the regression from the ~42 this file recorded
+historically, are their own workstream to be taken up **after** the
+visual pass: both predate this work and styling is not where they get
+fixed. Not chased here.
+| B4 | **Aerial haze on MapLibre buildings — BLOCKED, not attempted.** | `haze_*.png`, `sky_red.png` | — | **NOT POSSIBLE IN 5.6, and I mis-sold this at check-in.** Eight-variant sweep of `atmosphere-blend`/`fog-ground-blend`/`horizon-fog-blend` moved the tower pixels by **less than 0.1 of an RGB unit**. Control: setting every sky colour to `#ff0000` turned the sky red and changed 115,572 px, while the tower region stayed **byte-identical** — so `setSky` lands, it just does not composite over fill-extrusion. Full write-up + the four tier-D routes in QUESTIONS.md. |
+| A9 | **Building tone** (the achievable half of B4): `sunIntensity 0.30 → 0.22` + `BUILDING_COLORS` lightened +28/channel. Chosen by a 5-candidate sweep scored against the reference bands. | `a9_buildings.png` | **37.3** (base 34.9 — no cost; it is a colour ramp, no new draw work) | **KEEP — closer, and the first change you can actually see.** Building total abs error **83.7 → 31.2** (−63%). `building_right` 110.9 → **140.8**, landing *inside* the 132–148 target band (error **0.0**). `towers_far` 99.3 → **130.8** (target 162–177, still 31 short). Global midtone p50 **104.6 → 129.0**, closing most of the B3 gap (band 135–185). Saturation 0.079 and black floor 60.8 both unchanged and still in band; asphalt and sky untouched, so the change is targeted rather than a global wash. 36.27% of pixels moved, max delta **39/255** — far clear of the 6/255 floor. **Honest limit:** the sweep error plateaued at ~39 for *every* lightened candidate. That plateau is the near/far gradient we cannot make — the reference's distant buildings are BRIGHTER than its near ones because haze washes them skyward, so one flat ramp can match near or far, never both. I tuned it to nail near buildings exactly and take the improvement on distant ones. |

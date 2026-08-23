@@ -121,3 +121,43 @@ Arts, SF Ferry Building, the Las Vegas strip incl. a Paris-casino Eiffel
 replica) and third-party branding (Google Maps livery). Per the brief we
 chase the aesthetic only — no reproduction of these locations, signage,
 logos or branding in the game. Recorded here so it survives into STEP 4.
+
+## B4 aerial haze on MapLibre buildings is NOT possible in 5.6 — I mis-sold it
+
+At check-in I told David that B4 was reachable because
+`fogColor`/`atmosphereBlend`/`fogGroundBlend` "are existing sliders", and
+he approved it on that basis. **That claim was wrong.** The sliders exist
+and reach the sky; they do not reach the city.
+
+Proven by control experiment, not inference:
+
+- Swept `atmosphere-blend` (0.4/0.7/1.0), `fog-ground-blend` (0.2/0.9),
+  `horizon-fog-blend` (0.9) and every combination. The distant-tower
+  region came back **identical to 0.1 of an RGB unit in all eight runs**.
+- Control to prove `setSky` was actually working: set every sky colour to
+  `#ff0000`. The sky turned red and **115,572 pixels changed** — so the
+  call lands. The tower pixels stayed **byte-identical**: rgb(99.3, 98.6,
+  97.0) before and after, with `fog-color: #ff0000` at
+  `atmosphere-blend: 1.0`.
+
+**Conclusion:** MapLibre 5.6's sky/fog/atmosphere does not composite over
+fill-extrusion geometry. `LOOK.fogDensity` is a three.js `FogExp2` and only
+touches OUR objects (bridges, trees, traffic, car), never the city. This
+confirms the tier-D item STYLE.md §8 and the old GAP.md both flagged; I
+should have believed my own document instead of re-ranking it as cheap.
+
+**What real aerial perspective would need** (all tier D, none started):
+1. A custom fill-extrusion shader — not exposed in 5.6.
+2. Moving the city into three.js so our own fog applies — the architecture
+   rewrite QUESTIONS.md already logs.
+3. A screen-space depth-haze pass — needs an offscreen composite around
+   MapLibre's shared GL context.
+4. A cheap fake: a vertical screen-space gradient overlay, since distance
+   correlates with screen height in a pitched camera. **Rejected on
+   measurement:** it would also wash the sky, and the sky is already
+   *brighter* than the reference, so it would push a correct value wrong.
+
+**What I did instead** (A9, shipped): the measured gap was not only
+distance — *every* building was 25–80 units too dark. That part is real,
+config-only, and now fixed. The residual is specifically the near/far
+gradient. See PROGRESS.md.

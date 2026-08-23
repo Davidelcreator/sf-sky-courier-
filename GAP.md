@@ -4,6 +4,25 @@
 is in git history (`git show 0df0e30:GAP.md`). Target values:
 [STYLE.md](STYLE.md).
 
+## The structural lesson (added 2026-08-23, after A2/A4 both came back no-ops)
+
+**`LOOK` and `LANES` control the three.js layer and the vector basemap.
+They do NOT control the satellite raster's ground truth.** In the default
+`SATELLITE.ON_AT_START` view, the ground — water, road surface, painted
+lines, terrain colour — is largely aerial photography or MapLibre's own
+terrain render, and our colour knobs slide past it without touching it.
+
+This was proven, not guessed: forcing the water uniforms to magenta and
+hiding the water plane outright left the far-water region byte-identical,
+and `MARKING_BRIGHTNESS 0.85 → 0.55` moved the measured paint/asphalt ratio
+1.81× → 1.82×.
+
+Practical consequence for everything below: **a knob being present in
+config is not evidence it reaches the pixels you are looking at.** Before
+ranking any item by impact, confirm the knob owns those pixels. Do not
+chase the raster; where a material turns out to be photographic, the honest
+options are to restyle the vector basemap instead, or to leave it.
+
 ## Read this before the table
 
 **The old GAP.md is not just outdated — it audits a game that no longer

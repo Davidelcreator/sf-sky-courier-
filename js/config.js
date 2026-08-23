@@ -190,7 +190,13 @@ export const LOOK = {
   sunAzimuth: 210,
   sunPolar: 50,
   sunColor: '#fff3e2',
-  sunIntensity: 0.30,
+  // 0.22, not 0.30 (2026-08-23). MapLibre's light.intensity works
+  // BACKWARDS from intuition here: the building faces the chase camera
+  // sees point AWAY from the sun at azimuth 210, so raising intensity
+  // DARKENS them (0.9 drove distant towers to R=20). The reference has
+  // low face-to-face contrast anyway - sun:shade is only 2.27:1 with
+  // ~44% ambient (STYLE.md 2.2) - so flatter is also more accurate.
+  sunIntensity: 0.22,
 
   // --- MapLibre sky (background + distance haze) ---
   // Pale desaturated blue overhead fading into a warm-gray haze band at
@@ -303,13 +309,24 @@ export const SATELLITE = {
 // Measured from photographic reference (STYLE.md): city buildings read as
 // desaturated pale grays — even "white" towers sample at #959ca5. Slight
 // warm-to-cool drift with height keeps depth without game-y color.
+// Lightened +28/channel on 2026-08-23. Measured against the reference:
+// our buildings rendered R~94 (distant) / R~116 (near) against reference
+// R~162-177 / R~132-148 - every building was 25-80 units too dark. With
+// sunIntensity 0.22 this ramp lands them at R~124 / R~148, cutting total
+// error 83.7 -> 38.8.
+// HONEST LIMIT: the residual ~39 is the near/far gradient we cannot make.
+// The reference's distant buildings are BRIGHTER than its near ones because
+// haze washes them toward the sky; MapLibre 5.6 has no fog that touches
+// fill-extrusion (proven: fog-color #ff0000 at atmosphere-blend 1.0 leaves
+// these pixels byte-identical), so a flat ramp can match near or far but
+// never both. See QUESTIONS.md.
 export const BUILDING_COLORS = [
-  [0,   '#a2988b'],   // low-rise: hazed warm stucco
-  [15,  '#a7a297'],   // cream-gray
-  [35,  '#a0a19b'],   // neutral concrete
-  [70,  '#979da0'],   // cool gray
-  [130, '#8f969e'],   // tower gray-blue
-  [250, '#8a9097'],   // tallest towers, one step hazier
+  [0,   '#beb4a7'],   // low-rise: hazed warm stucco
+  [15,  '#c3beb3'],   // cream-gray
+  [35,  '#bcbdb7'],   // neutral concrete
+  [70,  '#b3b9bc'],   // cool gray
+  [130, '#abb2ba'],   // tower gray-blue
+  [250, '#a6acb3'],   // tallest towers, one step hazier
 ];
 
 // Real 3D terrain: hills, mountains, valleys. Elevation tiles ("DEM" =
