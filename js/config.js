@@ -279,7 +279,12 @@ export const LOOK = {
   // render" edge off; a static grain overlay adds the video feel.
   // Set both to 0 if you prefer the crisp look.
   gradeBlur: 0.3,      // px — keep tiny; labels blur too
-  grainOpacity: 0.25,  // ≈ the reference's σ 2-3/255 luminance noise
+  // Re-measured 2026-08-22 (STYLE.md §4): the reference is effectively
+  // grain-FREE — high-pass sigma is 0.02-0.24/255 in flat areas. The old
+  // "sigma 2-3" figure was measuring real image detail (water ripples,
+  // pavement texture) and called it noise, so we were adding ~4x the
+  // noise the footage actually has. 0.05 lands in the measured band.
+  grainOpacity: 0.05,
 };
 
 // Satellite imagery base. Free ESRI "World Imagery" tiles (no API key)

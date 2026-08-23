@@ -221,3 +221,22 @@ Two caveats, stated up front:
    a baseline in the same batch rather than trust absolutes. Flagged for
    David: the 60 fps bar in the brief is not currently met at this camera,
    independently of any visual work.
+
+## STEP 4 — working down the corrected GAP.md, tier A
+
+Baseline for this section: `shots/base_v2.png` (commit 97abc3d, the
+determinism fix). Noise floor from STEP 3: **6/255 on ~115 px**. Any
+verdict below has to clear that to count. FPS baseline **34.9** (0 NPCs)
+/ **31.8** (`npcmax=24`), RX 5700 XT, headless 1280x720.
+
+Region audit note: my first attempt at game-shot sample regions was
+wrong — at pitch 72 the camera sits ~18 deg above horizontal, so the big
+saturated blue mass I first labelled "sky" is actually the **bay water**.
+Corrected by vertical-profile audit before any measurement was trusted.
+Baseline values now recorded per region (sky #c8ced7 sat 0.079, water_far
+#5583be sat 0.549, asphalt #555657 sat 0.064, foliage #71756d sat 0.115,
+towers #636361 sat 0.025).
+
+| # | Change | Shot | FPS | Verdict |
+|---|---|---|---|---|
+| A1 | Film grain `grainOpacity 0.25 → 0.05` (STYLE.md §4: reference flat-area high-pass sigma is 0.02–0.24/255; the old "sigma 2–3" figure was measuring water ripples and pavement texture, not noise) | `a1_grain.png` | 35.9 (base 34.9 — within the ±25% drift noise; it is a CSS opacity, no draw-call change) | **KEEP, but barely visible — and my GAP ranking was wrong.** The change is real and broad: it moved **67.65% of all pixels**, but by a **max of 2/255** (mean 0.78). PNG dropped 954→658 KB, which is the honest tell: removing ±1 of dither compresses far better. Directionally correct — we were adding roughly 5× the fine noise the footage has, and now we are inside the measured band. But at 2/255 it is **below the perceptual threshold**, so nobody will see it. I ranked this "High impact" in GAP.md on the strength of the old sigma 2–3 figure being wrong by 5×; what I missed is that the *effect itself* was always tiny, so correcting it is a correctness win, not a visual one. GAP.md A1 impact rating should read **low**. |
