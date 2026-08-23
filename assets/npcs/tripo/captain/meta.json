@@ -4,6 +4,7 @@
   "generated": "2026-07-17T08:43:00Z",
   "tasks": {
     "generate": "c021c8d7-0fde-4b60-90f3-bdc985ecef8e",
-    "rig_error": "blocked on empty wallet 2026-07-17 — rerun rig/retarget against the generate task id above (no regeneration needed). NOTE: generated without face_limit (501k tris) — also run a low-poly convert."
-  }
+    "rig_error": "blocked on empty wallet 2026-07-17 — rerun rig/retarget against the generate task id above (no regeneration needed)."
+  },
+  "postprocess": "2026-08-22: decimated locally with tools/glb_shrink.js --tris=15000 (501,426 -> 15,000 tris; 14.32 MB -> 0.93 MB, 15.3x). Textures untouched. No Tripo credits spent — this is what face_limit 15000 would have produced. Original recoverable from git (commit c0784fb) or captain_static.orig.glb (gitignored)."
 }

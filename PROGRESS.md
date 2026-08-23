@@ -83,7 +83,8 @@ Every step: change → `npm run shot` (launch check + capture) → judge vs
 | Item | Result | Evidence |
 |---|---|---|
 | Pipeline | tools/tripo_chars.js: description → Tripo text_to_model → auto-rig → preset walk/idle retarget → GLB. One character per run (real money); key read from the Spectrum project's gitignored secrets, never this repo; meta.json keeps task ids so paid steps are never repeated | 2 characters generated |
-| Characters | Sea Captain (parrot on shoulder, 501k tris — pre-face_limit) and Berkeley Hippie (flower crown, 1.2 MB with face_limit 15000). Both generated from David's descriptions; rig+animations BLOCKED on empty Tripo wallet — task ids saved for the top-up | shots/tripo_captain_front.png, npc lineup comparisons |
+| Characters | Sea Captain (parrot on shoulder) and Berkeley Hippie (flower crown, 1.2 MB with face_limit 15000). Both generated from David's descriptions; rig+animations BLOCKED on empty Tripo wallet — task ids saved for the top-up | shots/tripo_captain_front.png, npc lineup comparisons |
 | Deliveries | RECIPIENTS in config join the route after the landmark BEACONS: beacon lands ON the character (verified: beacon pos == holder pos to the decimeter), HUD names them, "DELIVERED to the Sea Captain!" | beacon probe run |
 | Placement | both spots verified open ground via the game's own collision + roadway data after the wharf's rooftop "plazas" fooled three eyeballed placements — spotfinder grid probe is the honest tool | shots/recipient_captain9.png |
-| Loading | recipient models lazy-load at 2.5 km so the 15 MB captain costs nothing until you visit the wharf | js/npcs.js updateRecipients |
+| Loading | recipient models lazy-load at 2.5 km, so a character costs nothing until you visit them | js/npcs.js updateRecipients |
+| Captain shrink | he shipped at 501k tris / 15 MB (generated before face_limit existed) — a 15 MB pull on mobile the moment you neared the wharf. Decimated locally to 15,000 tris / 0.93 MB (15.3x) with tools/glb_shrink.js; textures untouched, no Tripo credits spent. Verified byte-for-byte over the wire through the real RECIPIENTS path | 0.93 MB transfer measured, shots/captain_lineup.png |

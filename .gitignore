@@ -13,3 +13,6 @@ shots/
 ref2/
 
 # Tripo character work files: ship the .glb + meta.json, skip nothing else
+# (tools/glb_shrink.js --inplace leaves a full-size .orig.glb backup beside
+#  the shrunk model — local undo only, never worth committing)
+*.orig.glb
