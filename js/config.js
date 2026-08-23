@@ -118,6 +118,41 @@ export const VEHICLES = [
   },
 ];
 
+// ============================================================
+// SHOT PRESETS — named, committed camera setups for captures
+// ============================================================
+// Every visual A/B needs a stable instrument, so each capture camera is
+// pinned here rather than typed from memory. Use them with
+//   node tools/capture.js <outname> "preset=<name>"
+// which loads ?shot=1&preset=<name>. Individual URL params still win, so
+// "preset=sky&alt=600" works for one-off probing.
+//
+// RULES for this table:
+//  - 'main' reproduces the original hardcoded shot EXACTLY. Do not touch
+//    its numbers: the whole PROGRESS.md comparison history is measured
+//    against it, and changing them silently invalidates every past verdict.
+//  - Every preset must be deterministic (no NPCs, no traffic — shot mode
+//    already handles that) and have its noise floor measured once before
+//    it is used for a verdict.
+//
+// pitch is MapLibre's: 0 = straight down, 90 = horizontal. HIGHER pitch
+// shows MORE sky. (maxPitch is 80 on this map.)
+export const SHOT_PRESETS = {
+  // The workhorse: Embarcadero at Broadway looking SE to the Ferry
+  // Building. Road surface, near + distant buildings, water, trees.
+  main: { lng: -122.39735, lat: 37.79930, alt: 3, heading: 2.7,
+          zoom: 19.5, pitch: 72, cam: 1 },
+
+  // Sky/atmosphere rig: high and looking out over the bay at near-max
+  // pitch, so sky fills the top third instead of a 55px sliver. For
+  // judging sky colour, the horizon gradient and aerial perspective.
+  // hover:true is REQUIRED for any airborne preset — physics still runs
+  // in shot mode, so without it the car sinks and the frame never settles
+  // (this rig asked for 400 m and the first capture landed at 311).
+  sky:  { lng: -122.39735, lat: 37.79930, alt: 400, heading: 0.9,
+          zoom: 15.5, pitch: 80, cam: 1, hover: true },
+};
+
 // Chase camera: follows behind and above the car, looking forward.
 // Press C (or the CAM button) in-game to cycle through MODES.
 //   zoom  = how close the camera sits (higher = closer)

@@ -28,7 +28,7 @@ import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders
 const V = new URL(import.meta.url).search;
 const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
         SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS, OSM_HIDE_IDS, LOOK,
-        ROADS3D, LANDMARKS, LANES, NPCS } =
+        ROADS3D, LANDMARKS, LANES, NPCS, SHOT_PRESETS } =
   await import('./config.js' + V);
 // The pedestrian system lives in its own module (it's a small game of its
 // own: districts, archetypes, sidewalk wandering — see js/npcs.js).
@@ -42,6 +42,9 @@ const maplibregl = window.maplibregl;
 // same camera, frozen water/beacon animation, no traffic, no HUD. It ONLY
 // activates when the URL contains ?shot — normal play is untouched.
 const SHOT = new URLSearchParams(window.location.search).has('shot');
+// Altitude to re-pin every frame for airborne shot presets (see tick).
+// null = let physics do its thing, which is what ground presets want.
+let shotHover = null;
 
 // Meters in one degree of latitude, everywhere on Earth. (Longitude
 // degrees shrink as you go toward the poles — we correct for that
@@ -3624,6 +3627,13 @@ function tick(now) {
   lastTime = now;
 
   updatePhysics(dt);
+  // Airborne shot presets must not sink. Physics keeps running in shot
+  // mode, which is harmless for a preset parked on the road (it just
+  // settles onto the ground) but ruinous for one posed at altitude: the
+  // sky rig asked for alt 400 and the capture landed at 311 with the whole
+  // frame still moving, so consecutive shots never matched. Presets that
+  // set `hover` get their altitude re-pinned every frame instead.
+  if (SHOT && shotHover !== null) { car.alt = shotHover; car.vAlt = 0; }
   checkCollisions(now);
   checkDelivery();
   if (!SHOT) updateTraffic(dt, now); // traffic is random — skip it in shot mode
@@ -3671,21 +3681,27 @@ window.addEventListener('keydown', (e) => {
 // Override any of them in the URL: ?shot&lng=..&lat=..&alt=..&heading=..
 if (SHOT) {
   const q = new URLSearchParams(window.location.search);
-  car.lng = parseFloat(q.get('lng') ?? '-122.39735');  // The Embarcadero at Broadway
-  car.lat = parseFloat(q.get('lat') ?? '37.79930');
-  car.alt = parseFloat(q.get('alt') ?? '3');
-  car.heading = parseFloat(q.get('heading') ?? '2.7'); // looking SE toward the Ferry Building
+  // ?preset=<name> picks a committed camera from SHOT_PRESETS (config.js);
+  // 'main' is the historical hardcoded shot. Individual URL params still
+  // override, so "preset=sky&alt=600" works for one-off probing.
+  const P = SHOT_PRESETS[q.get('preset')] ?? SHOT_PRESETS.main;
+  const num = (key, fallback) => (q.has(key) ? parseFloat(q.get(key)) : fallback);
+  car.lng = num('lng', P.lng);          // default: Embarcadero at Broadway
+  car.lat = num('lat', P.lat);
+  car.alt = num('alt', P.alt);
+  car.heading = num('heading', P.heading); // default: SE toward the Ferry Building
   car.vx = 0; car.vy = 0; car.vAlt = 0;
+  if (P.hover) shotHover = car.alt; // airborne rig: hold this altitude
   if (q.get('q')) state.quality = q.get('q'); // e.g. &q=high to shoot with shadows
   state.camHeading = car.heading;
-  state.cameraMode = parseInt(q.get('cam') ?? '1', 10);
+  state.cameraMode = q.has('cam') ? parseInt(q.get('cam'), 10) : P.cam;
   // The chase camera eases zoom/pitch toward the mode preset every frame,
   // so one-time values would be erased. Instead we set the two offsets it
   // respects: zoomNudge (added to the preset) and look.pitch (kept as-is
   // while the car is parked). Both give a stable, repeatable framing.
   const mode = CAMERA.MODES[state.cameraMode];
-  state.camZoom = parseFloat(q.get('zoom') ?? '19.5');
-  state.camPitch = parseFloat(q.get('pitch') ?? '72');
+  state.camZoom = num('zoom', P.zoom);
+  state.camPitch = num('pitch', P.pitch);
   state.zoomNudge = state.camZoom - mode.zoom;
   look.pitch = state.camPitch - mode.pitch;
   look.yaw = 0;

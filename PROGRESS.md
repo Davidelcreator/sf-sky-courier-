@@ -290,3 +290,54 @@ visual pass: both predate this work and styling is not where they get
 fixed. Not chased here.
 | B4 | **Aerial haze on MapLibre buildings — BLOCKED, not attempted.** | `haze_*.png`, `sky_red.png` | — | **NOT POSSIBLE IN 5.6, and I mis-sold this at check-in.** Eight-variant sweep of `atmosphere-blend`/`fog-ground-blend`/`horizon-fog-blend` moved the tower pixels by **less than 0.1 of an RGB unit**. Control: setting every sky colour to `#ff0000` turned the sky red and changed 115,572 px, while the tower region stayed **byte-identical** — so `setSky` lands, it just does not composite over fill-extrusion. Full write-up + the four tier-D routes in QUESTIONS.md. |
 | A9 | **Building tone** (the achievable half of B4): `sunIntensity 0.30 → 0.22` + `BUILDING_COLORS` lightened +28/channel. Chosen by a 5-candidate sweep scored against the reference bands. | `a9_buildings.png` | **37.3** (base 34.9 — no cost; it is a colour ramp, no new draw work) | **KEEP — closer, and the first change you can actually see.** Building total abs error **83.7 → 31.2** (−63%). `building_right` 110.9 → **140.8**, landing *inside* the 132–148 target band (error **0.0**). `towers_far` 99.3 → **130.8** (target 162–177, still 31 short). Global midtone p50 **104.6 → 129.0**, closing most of the B3 gap (band 135–185). Saturation 0.079 and black floor 60.8 both unchanged and still in band; asphalt and sky untouched, so the change is targeted rather than a global wash. 36.27% of pixels moved, max delta **39/255** — far clear of the 6/255 floor. **Honest limit:** the sweep error plateaued at ~39 for *every* lightened candidate. That plateau is the near/far gradient we cannot make — the reference's distant buildings are BRIGHTER than its near ones because haze washes them skyward, so one flat ramp can match near or far, never both. I tuned it to nail near buildings exactly and take the improvement on distant ones. |
+
+### Capture presets: named + committed (David's condition, 2026-08-23)
+
+`SHOT_PRESETS` in config.js; used as `node tools/capture.js <out> "preset=<name>"`.
+Individual URL params still override for one-off probing. `main` reproduces
+the original hardcoded shot **exactly** — verified at 3–6 px / delta 1,
+inside its own 6/255 floor, so the whole comparison history above stays
+valid. Built one at a time, as instructed.
+
+**Correction to what I proposed at check-in:** I said the sky rig should be
+`pitch 35 / alt 400`, and David approved that. **The pitch was backwards.**
+MapLibre pitch is 0 = straight down, 90 = horizontal, so 35 is nearly
+top-down and would have shown *less* sky than the standard shot. The repo's
+own camera table proves it — TOP-DOWN is pitch 15, CINEMA (pitch 78) is
+"low drama, big horizon". The rig uses **pitch 80** (the map's `maxPitch`).
+
+**Determinism bug found and fixed while qualifying the sky preset.**
+Its first three captures came back at **max delta 151/255 across 376,273 px
+(40.8%)** — catastrophically worse than `main`. Cause: **physics keeps
+running in shot mode.** For a preset parked on the road that is harmless
+(the car just settles onto the ground), but the sky rig is posed at 400 m,
+so the car *fell* — the capture logged `alt: 311.5` against a requested 400,
+and the frame was still moving when the shutter fired. Diagnosed by
+screenshotting one session at 2/4/6/10 s: the image never converged, PSNR
+got steadily *worse* (22.5 → 20.8 → 18.9 dB), while `map.loaded()`
+oscillated false→true→false and `areTilesLoaded` stayed true the whole
+time — so it was never tile streaming.
+
+Fix: presets may set `hover: true`, and shot mode re-pins that altitude
+every frame. Ground presets are untouched (`shotHover` stays null).
+
+| preset | camera | noise floor |
+|---|---|---|
+| `main` | Embarcadero @ Broadway, alt 3, pitch 72, zoom 19.5 | 6/255, ~115 px (0.0125%) |
+| `sky` | same spot, alt 400 **hover**, heading 0.9 (NE over the bay), pitch 80, zoom 15.5 | **0/255 — all three runs BIT-IDENTICAL** |
+
+### A3 sky: measured on the new rig (change not yet made)
+
+| | game | reference |
+|---|---|---|
+| top of sky | `#b0bfd4` sat **0.170** | zenith `#90b1db` sat **0.341** |
+| descending | sat 0.164 → 0.147 → 0.118 → **0.077** | 0.317 → 0.247 → **0.193** |
+| below y188 | **hard seam**, then sat **0.386 → 0.508 → 0.442** | nothing like it |
+
+Two distinct problems, not one. (1) Our MapLibre sky is **half the
+reference's saturation** and desaturates far too fast toward the horizon.
+(2) There is a **hard horizontal seam** at y≈188 where the sky meets an
+over-saturated blue band (sat up to 0.508 — *more* saturated than anything
+in the entire reference set, whose ceiling is 0.341). That band is the same
+unidentified blue from the A2 investigation, now seen full-width. Fixing
+the sky colour alone will not help while the seam is there.
