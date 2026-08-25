@@ -124,6 +124,20 @@
         <li><b>SPACE</b> (hold) upward thrust</li>
       </ul>
       <button id="start-button">START ENGINE</button>
+      <!-- Performance test: flies a fixed route and reports FPS. Tap it,
+           wait ~33s, read three numbers. No cable or DevTools needed. -->
+      <button id="bench-button">&#9201; BENCHMARK</button>
+    </div>
+  </div>
+
+  <!-- Benchmark overlay: countdown while running, big numbers when done. -->
+  <div id="bench-overlay">
+    <div id="bench-card">
+      <div id="bench-status">WARM-UP</div>
+      <div id="bench-timer">3</div>
+      <div id="bench-results"></div>
+      <div id="bench-device"></div>
+      <button id="bench-close">DONE</button>
     </div>
   </div>
 

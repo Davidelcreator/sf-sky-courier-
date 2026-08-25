@@ -28,7 +28,7 @@ import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders
 const V = new URL(import.meta.url).search;
 const { START, BEACONS, PHYSICS, CAMERA, GAME, BRIDGES, TREE_SPOTS, TERRAIN, VEHICLES,
         SATELLITE, BUILDING_COLORS, BUSH_MULT, TRAFFIC, GRAPHICS, OSM_HIDE_IDS, LOOK,
-        ROADS3D, LANDMARKS, LANES, NPCS, SHOT_PRESETS } =
+        ROADS3D, LANDMARKS, LANES, NPCS, SHOT_PRESETS, BENCH } =
   await import('./config.js' + V);
 // The pedestrian system lives in its own module (it's a small game of its
 // own: districts, archetypes, sidewalk wandering — see js/npcs.js).
@@ -3629,6 +3629,127 @@ function updateHUD() {
 
 let lastTime = null;
 
+// ============================================================
+// BENCHMARK MODE
+// ============================================================
+// Flies BENCH.ROUTE and reports min / average / 95th-percentile FPS.
+// The camera position is a PURE FUNCTION OF ELAPSED TIME, so a slow phone
+// and a fast one fly the identical path through identical geometry and
+// only the frame rate differs. Physics, input, collisions and delivery
+// logic are all bypassed — nothing can branch, so the run is repeatable
+// months apart. Every other per-frame system (traffic, NPCs, 3D roads,
+// trees, shadows) still runs, so the load is the real one.
+const bench = { active: false, t0: 0, frames: [], done: false };
+
+// Position along the route at time t (seconds into the measured window).
+function benchRouteAt(t) {
+  const R = BENCH.ROUTE;
+  if (t <= R[0].t) return R[0];
+  for (let i = 0; i < R.length - 1; i++) {
+    const a = R[i], b = R[i + 1];
+    if (t >= a.t && t <= b.t) {
+      const k = (t - a.t) / (b.t - a.t);
+      const L = (x, y) => x + (y - x) * k;
+      let dh = b.heading - a.heading;            // turn the short way round
+      while (dh > Math.PI) dh -= Math.PI * 2;
+      while (dh < -Math.PI) dh += Math.PI * 2;
+      return { lng: L(a.lng, b.lng), lat: L(a.lat, b.lat), alt: L(a.alt, b.alt),
+               heading: a.heading + dh * k, zoom: L(a.zoom, b.zoom), pitch: L(a.pitch, b.pitch) };
+    }
+  }
+  return R[R.length - 1];
+}
+
+function startBench() {
+  if (bench.active) return;
+  bench.active = true; bench.done = false; bench.frames = [];
+  bench.t0 = performance.now();
+  state.running = true;
+  state.invulnUntil = Infinity;
+  overlay.classList.add('hidden');
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('bench-overlay').classList.add('show');
+  document.getElementById('bench-results').innerHTML = '';
+  document.getElementById('bench-device').textContent = '';
+  document.getElementById('bench-close').style.display = 'none';
+}
+
+function updateBench(now, dt) {
+  const elapsed = (now - bench.t0) / 1000;
+  const t = elapsed - BENCH.WARMUP_S;          // negative during warm-up
+  const statusEl = document.getElementById('bench-status');
+  const timerEl = document.getElementById('bench-timer');
+
+  const P = benchRouteAt(Math.max(0, t));
+  car.lng = P.lng; car.lat = P.lat; car.alt = P.alt; car.heading = P.heading;
+  car.vx = 0; car.vy = 0; car.vAlt = 0;
+  state.camHeading = P.heading;
+
+  // Drive the map directly: the chase camera eases with dt, which would
+  // make the path frame-rate dependent — the exact thing this must avoid.
+  map.jumpTo({
+    center: [P.lng, P.lat], elevation: P.alt,
+    bearing: P.heading / DEG, pitch: Math.max(0, Math.min(85, P.pitch)),
+    zoom: P.zoom, padding: { top: Math.round(window.innerHeight * 0.45) },
+  });
+
+  // Real per-frame load, minus anything that could branch.
+  updateTraffic(dt, now);
+  updateNPCs(dt, now);
+  refreshRoad3D(now);
+  validateTrees(now);
+  rebuildShadows(now);
+  animateGrain();
+
+  if (t < 0) {
+    statusEl.textContent = 'WARM-UP';
+    timerEl.textContent = String(Math.ceil(-t));
+    return;
+  }
+  if (dt > 0) bench.frames.push(dt * 1000);     // frame time in ms
+  if (t < BENCH.DURATION_S) {
+    statusEl.textContent = 'MEASURING';
+    timerEl.textContent = String(Math.ceil(BENCH.DURATION_S - t));
+    return;
+  }
+  finishBench();
+}
+
+function finishBench() {
+  bench.active = false; bench.done = true;
+  const ms = bench.frames.slice().sort((a, b) => a - b);
+  const n = ms.length;
+  const pct = (q) => ms[Math.min(n - 1, Math.max(0, Math.round(q * (n - 1))))];
+  const avg = 1000 / (ms.reduce((a, b) => a + b, 0) / n);
+  const min = 1000 / ms[n - 1];   // single worst frame
+  // "1% low" = mean of the slowest 1% of frames. This is the stutter
+  // number, and it replaces a plain 95th percentile deliberately: with
+  // vsync at 60 Hz, 95% of frames sit at 16.7 ms, so p95 comes out ABOVE
+  // the average and tells you nothing (measured: p95 59.5 vs avg 57.5).
+  // The slow tail is where a phone actually hurts. p95 is still reported
+  // in the detail line for anyone who wants it.
+  const tail = ms.slice(Math.max(0, Math.floor(n * 0.99)));
+  const low1 = 1000 / (tail.reduce((a, b) => a + b, 0) / tail.length);
+  const p95 = 1000 / pct(0.95);
+  const row = (k, v, unit) =>
+    `<div class="row"><span class="k">${k}</span><span class="v">${v}<small> ${unit}</small></span></div>`;
+
+  document.getElementById('bench-status').textContent = 'RESULT';
+  document.getElementById('bench-timer').textContent = avg.toFixed(0);
+  document.getElementById('bench-results').innerHTML =
+    row('AVERAGE', avg.toFixed(1), 'fps') +
+    row('1% LOW', low1.toFixed(1), 'fps') +
+    row('MINIMUM', min.toFixed(1), 'fps');
+
+  const s = window.screen || {};
+  document.getElementById('bench-device').innerHTML =
+    `route v${BENCH.ROUTE_VERSION} &middot; ${BENCH.DURATION_S}s &middot; ${n} frames &middot; quality <b>${state.quality}</b> &middot; p95 ${p95.toFixed(1)}<br>` +
+    `screen ${s.width || '?'}&times;${s.height || '?'} css / dpr ${window.devicePixelRatio || 1} ` +
+    `&middot; viewport ${window.innerWidth}&times;${window.innerHeight}<br>` +
+    `${navigator.userAgent}`;
+  document.getElementById('bench-close').style.display = '';
+}
+
 function tick(now) {
   requestAnimationFrame(tick); // always book the next frame first
 
@@ -3638,6 +3759,10 @@ function tick(now) {
   // from a background tab) can't teleport the car through a building.
   const dt = Math.min((now - lastTime) / 1000 || 0, 0.05);
   lastTime = now;
+
+  // Benchmark drives everything itself and must not be perturbed by
+  // physics, input or the easing chase camera.
+  if (bench.active) { updateBench(now, dt); return; }
 
   updatePhysics(dt);
   // Airborne shot presets must not sink. Physics keeps running in shot
@@ -3684,6 +3809,23 @@ function startGame() {
 }
 
 document.getElementById('start-button').addEventListener('click', startGame);
+
+// --- Benchmark wiring ---
+// Tap BENCHMARK (or load ?bench=1) → fixed 30 s route → three numbers.
+document.getElementById('bench-button').addEventListener('click', startBench);
+document.getElementById('bench-close').addEventListener('click', () => {
+  document.getElementById('bench-overlay').classList.remove('show');
+  document.getElementById('hud').style.display = '';
+  overlay.classList.remove('hidden');   // back to the start screen
+  state.running = false;
+});
+if (new URLSearchParams(window.location.search).has('bench')) {
+  // Auto-run needs the scene up first, or the warm-up measures tile
+  // loading instead of rendering.
+  const waitReady = setInterval(() => {
+    if (didInitGame && map.loaded()) { clearInterval(waitReady); startBench(); }
+  }, 250);
+}
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Enter') startGame();
 });

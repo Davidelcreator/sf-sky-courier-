@@ -92,8 +92,21 @@ deterministic. Ours was not, and we found out only by testing it:
   vehicle simply *fell*, and the frame never settled.
 
 **Rule: every capture preset is named, committed, and has its noise floor
-measured once before it is trusted for a verdict.** Ours ended at 6/255 for
-the ground rig and 1/255 for the airborne one.
+measured once before it is trusted for a verdict.**
+
+#### Current noise floors — check the date before trusting these
+
+| preset | floor | as of | note |
+|---|---|---|---|
+| `main` (ground, alt 3) | **6/255** on ~115 px (0.0125%) | 2026-08-25 | sub-pixel AA on distant building edges; appears in ~1 run in 6 |
+| `sky` (airborne, alt 400) | **1/255** on ~243 px | 2026-08-25 | **was 0/255 (bit-identical) until the backdrop fix**; the CSS gradient dithers very slightly run to run |
+
+**A stale noise floor is how a real regression gets waved through.** The
+`sky` rig qualified at a perfect 0/255, then a later change moved it to
+1/255 — small, but a verdict judged against the *old* threshold would
+treat a 1-unit regression as impossible rather than as noise. **Re-measure
+the floor after any change that touches how a preset is composited, and
+update this table with the date.**
 
 **Diagnostic that found the second bug:** screenshot one session at 2/4/6/10
 seconds. If the image is still changing, it is not settled. PSNR getting

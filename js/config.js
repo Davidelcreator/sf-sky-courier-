@@ -153,6 +153,43 @@ export const SHOT_PRESETS = {
           zoom: 15.5, pitch: 80, cam: 1, hover: true },
 };
 
+// ============================================================
+// BENCHMARK — a self-contained, repeatable performance test
+// ============================================================
+// Tap BENCHMARK on the start screen (or load ?bench=1). The camera flies
+// a FIXED scripted route and reports min / average / 95th-percentile FPS
+// in big text, along with the device and screen size.
+//
+// Why it is built this way:
+//  - Position is a pure function of ELAPSED TIME, not of frame count or
+//    physics. A slow phone and a fast one therefore fly the SAME path
+//    through the same geometry; only the frame rate differs. If the route
+//    were driven by physics, a slow device would travel less far and
+//    would be measured on an easier scene — which is exactly the bug that
+//    makes most in-game benchmarks non-comparable.
+//  - No player input, no collisions, no delivery logic. Nothing can
+//    branch, so the run is identical months apart.
+//  - CHANGING ANY NUMBER BELOW INVALIDATES COMPARISON WITH OLD RESULTS.
+//    If you must change the route, bump ROUTE_VERSION so old numbers are
+//    obviously not comparable.
+export const BENCH = {
+  ROUTE_VERSION: 1,
+  WARMUP_S: 3,     // tiles/shaders settle; NOT measured (counts down on screen)
+  DURATION_S: 30,  // measured window
+
+  // Waypoints: t = seconds into the measured window. The camera lerps
+  // between them. Deliberately covers the cheap and expensive extremes:
+  // dense low-altitude downtown, a climb over the skyline, open water.
+  ROUTE: [
+    { t: 0,  lng: -122.39735, lat: 37.79930, alt: 12,  heading: 2.70, zoom: 17.6, pitch: 72 },
+    { t: 6,  lng: -122.39980, lat: 37.79430, alt: 25,  heading: 2.95, zoom: 17.2, pitch: 74 },
+    { t: 12, lng: -122.40150, lat: 37.79080, alt: 120, heading: 3.40, zoom: 16.2, pitch: 70 },
+    { t: 18, lng: -122.39400, lat: 37.79200, alt: 260, heading: 4.60, zoom: 15.4, pitch: 66 },
+    { t: 24, lng: -122.38600, lat: 37.79900, alt: 180, heading: 5.60, zoom: 15.8, pitch: 70 },
+    { t: 30, lng: -122.39300, lat: 37.80350, alt: 40,  heading: 0.30, zoom: 17.0, pitch: 73 },
+  ],
+};
+
 // Chase camera: follows behind and above the car, looking forward.
 // Press C (or the CAM button) in-game to cycle through MODES.
 //   zoom  = how close the camera sits (higher = closer)

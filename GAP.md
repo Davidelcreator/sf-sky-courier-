@@ -17,6 +17,16 @@ hiding the water plane outright left the far-water region byte-identical,
 and `MARKING_BRIGHTNESS 0.85 → 0.55` moved the measured paint/asphalt ratio
 1.81× → 1.82×.
 
+**Follow-up correction (2026-08-25).** For water the deeper reason turned
+out to be different again: that region is not a *material* at all. It is
+**see-through canvas** (5.8% of the frame at street level, 19.1% from
+altitude) showing the backdrop gradient behind it. So A2's "water is the
+biggest gap" ranking was measuring a hole, not a surface. The real water —
+the three.js plane in the near-left of frame — already sits on the
+reference hue at sat 0.065, B−R −3. **A2 is withdrawn, not merely parked.**
+The lesson stands and gains a second edge: confirm the knob owns the
+pixels, *and* confirm the pixels are a surface.
+
 Practical consequence for everything below: **a knob being present in
 config is not evidence it reaches the pixels you are looking at.** Before
 ranking any item by impact, confirm the knob owns those pixels. Do not

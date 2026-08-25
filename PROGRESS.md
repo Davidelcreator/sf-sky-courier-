@@ -237,10 +237,19 @@ Baseline values now recorded per region (sky #c8ced7 sat 0.079, water_far
 #5583be sat 0.549, asphalt #555657 sat 0.064, foliage #71756d sat 0.115,
 towers #636361 sat 0.025).
 
+> **CORRECTION (2026-08-25):** the region labelled `water_far` above is
+> **not water**. It is see-through canvas showing the backdrop gradient —
+> proven by per-pixel alpha (5.80% of this preset is transparent, at
+> `y 62–174`). The value `#5583be sat 0.549` is a partial blend of backdrop
+> and canvas, not a water sample. It is left in place because later entries
+> reason about it, but **no conclusion about water may rest on it.** The
+> genuine three.js water is the near-left region and measures sat 0.065,
+> B−R −3 — already on the reference hue.
+
 | # | Change | Shot | FPS | Verdict |
 |---|---|---|---|---|
 | A1 | Film grain `grainOpacity 0.25 → 0.05` (STYLE.md §4: reference flat-area high-pass sigma is 0.02–0.24/255; the old "sigma 2–3" figure was measuring water ripples and pavement texture, not noise) | `a1_grain.png` | 35.9 (base 34.9 — within the ±25% drift noise; it is a CSS opacity, no draw-call change) | **KEEP, but barely visible — and my GAP ranking was wrong.** The change is real and broad: it moved **67.65% of all pixels**, but by a **max of 2/255** (mean 0.78). PNG dropped 954→658 KB, which is the honest tell: removing ±1 of dither compresses far better. Directionally correct — we were adding roughly 5× the fine noise the footage has, and now we are inside the measured band. But at 2/255 it is **below the perceptual threshold**, so nobody will see it. I ranked this "High impact" in GAP.md on the strength of the old sigma 2–3 figure being wrong by 5×; what I missed is that the *effect itself* was always tiny, so correcting it is a correctness win, not a visual one. GAP.md A1 impact rating should read **low**. |
-| A2 | Water hue `waterDeep #7d8b93 → warm-neutral` (STYLE.md §1.6: reference water is B−R **−6 to −37**, sat 0.065–0.300; the shot measured B−R **+106**, sat 0.549) | — no shot, change never made | — | **NOT ATTEMPTED — the knob does not control what I measured.** Diagnostic: forcing `uDeep`/`uShallow` to magenta **and** hiding the water plane outright left the far-water region **byte-identical** (rgb 84.6,131.2,190.4 in all three). The three.js plane is only visible in `x[0..466] y[173..719]` — the *near* water — and there it already measures `#b3bbb0`, sat 0.065, B−R −3, i.e. **already on the reference hue**, just light. So the huge blue mass driving my "biggest gap" call is something else. Ruled out by direct test: satellite raster (hiding it changes only `y[193..719]`), `natural_earth` (3 px), every vector fill (`fillLayersVisible` is empty), the `background` layer (already `visibility:none`), and `queryRenderedFeatures` returns `[]` there. Remaining suspect is MapLibre's own terrain/atmosphere render over sub-sea-level bathymetry. **Unresolved — raised at check-in.** |
+| A2 | Water hue `waterDeep #7d8b93 → warm-neutral` (STYLE.md §1.6: reference water is B−R **−6 to −37**, sat 0.065–0.300; the shot measured B−R **+106**, sat 0.549 — **CORRECTION 2026-08-25: that measurement was see-through canvas, not water; see the backdrop entry below**) | — no shot, change never made | — | **NOT ATTEMPTED — the knob does not control what I measured.** Diagnostic: forcing `uDeep`/`uShallow` to magenta **and** hiding the water plane outright left the far-water region **byte-identical** (rgb 84.6,131.2,190.4 in all three). The three.js plane is only visible in `x[0..466] y[173..719]` — the *near* water — and there it already measures `#b3bbb0`, sat 0.065, B−R −3, i.e. **already on the reference hue**, just light. So the huge blue mass driving my "biggest gap" call is something else. Ruled out by direct test: satellite raster (hiding it changes only `y[193..719]`), `natural_earth` (3 px), every vector fill (`fillLayersVisible` is empty), the `background` layer (already `visibility:none`), and `queryRenderedFeatures` returns `[]` there. Remaining suspect is MapLibre's own terrain/atmosphere render over sub-sea-level bathymetry. **Unresolved — raised at check-in.** |
 | A4 | Lane paint `MARKING_BRIGHTNESS 0.85 → 0.55` (STYLE.md §5: reference paint is 1.14–1.65× asphalt; ours measured **1.81×**) | `a4_paint.png` | — | **REVERTED — no measurable effect.** Paint/asphalt ratio went **1.81× → 1.82×**. `MARKING_BRIGHTNESS` *is* wired up (main.js:401 for the vector marking layers, 1711/2231 for ROADS3D), and the four `lane-*` layers report `visibility:visible` — but in the default satellite basemap the bright lines I sampled are not those layers. Reverted rather than kept as an unproven edit. **Needs a proper vector-basemap capture to evaluate** (my satellite-off probe only hid the raster; it did not re-show the vector fills, so it was not a real vector-mode test). |
 
 ### Tier B answered from the baseline capture (GAP.md B1–B5)
@@ -482,3 +491,45 @@ Shipped over the pass: A1 grain (correct, near-invisible), A9 building tone
 presets, and the backdrop grade fix. Parked with evidence: A2 water and A4
 lanes (knob-disconnects), B4 aerial haze (impossible in 5.6), A3 sky
 (direction changed before it was reached).
+
+## MOBILE — benchmark mode (2026-08-25)
+
+`BENCH` in config.js + a **BENCHMARK** button on the start screen (also
+`?bench=1`). Tap it, wait ~33 s, read three numbers. No cable, no DevTools,
+no Mac.
+
+**Why it is comparable.** Camera position is a **pure function of elapsed
+time**, not of frame count or physics. A slow phone and a fast one fly the
+*identical* path through identical geometry; only the frame rate differs.
+Had the route been physics-driven, a slow device would travel less far and
+be scored on an easier scene — the bug that makes most in-game benchmarks
+useless. Input, collisions and delivery logic are bypassed so nothing can
+branch. Traffic, NPCs, 3D roads, trees and shadows all still run, so the
+load is the real one. `ROUTE_VERSION` is stamped on the result; changing
+any route number invalidates comparison with older results.
+
+Route: 30 s over six waypoints, deliberately spanning the cheap and
+expensive extremes — low-altitude dense downtown, a climb over the skyline,
+open water, descent to the waterfront. 3 s warm-up (counted down on screen,
+not measured) so tile/shader settling is not scored.
+
+**The metric changed on measurement.** The brief asked for min / average /
+95th percentile. The first run returned **p95 = 59.5 fps against a 57.5 fps
+average** — a "worst case" better than the mean. That is arithmetically
+correct and useless: with vsync at 60 Hz, 95% of frames sit at 16.7 ms, so
+p95 carries no signal. Replaced with **1% low** (mean of the slowest 1% of
+frames), the standard stutter figure, which on the same scene reports
+**22.2 fps against a 55.4 fps average** — informative. p95 is still printed
+in the detail line.
+
+Reports alongside: route version, duration, frame count, quality preset,
+p95, screen size in CSS px, devicePixelRatio, viewport, and full user
+agent — so a number never has to be matched to a phone from memory.
+
+Verified end to end on a 393×852 @3x mobile viewport: 1,660 frames, 0 page
+errors, and the scripted position at the same elapsed time matched across
+two runs to ~1e-5 degrees, confirming the route is time-driven.
+
+**Caveat that matters:** the numbers above are headless desktop and mean
+nothing about phone performance. That is the entire reason this tool
+exists — no real-device figure exists yet.
