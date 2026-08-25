@@ -34,6 +34,16 @@
 </head>
 <body>
 
+  <!-- Backdrop: what shows through wherever the map canvas is transparent.
+       MapLibre draws sky above the horizon and terrain below it, but the
+       terrain mesh stops short of the horizon, leaving a see-through band
+       between them (measured: 5.8% of the frame at street level, 19.1%
+       from altitude). This div fills it. It lives here, in front of body,
+       so it can be given the SAME colour grade as the canvas — see
+       applyLook(). Previously this gradient was on html/body, behind the
+       canvas, where the grade could never reach it. -->
+  <div id="backdrop"></div>
+
   <!-- The map fills the whole screen. Everything else floats on top of it. -->
   <div id="map"></div>
 

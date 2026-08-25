@@ -319,6 +319,18 @@ export const LOOK = {
   // mild luminance noise. A whisper of blur takes the razor-crisp "game
   // render" edge off; a static grain overlay adds the video feel.
   // Set both to 0 if you prefer the crisp look.
+  // --- Backdrop ---
+  // Shown wherever the map canvas is transparent: the band between
+  // MapLibre's sky and the far edge of the terrain mesh (5.8% of the
+  // frame at street level, 19.1% from 400 m). These were hard-coded in
+  // style.css on html/body, BEHIND the canvas, so the grade below never
+  // reached them — the one thing on screen outside every visual decision
+  // this project made. Now on #backdrop, in front of body, graded with
+  // the canvas. Stops are top / 45% / bottom.
+  backdropTop: '#3d6fb5',
+  backdropMid: '#7db3e8',
+  backdropBottom: '#cfe6f7',
+
   gradeBlur: 0.3,      // px — keep tiny; labels blur too
   // Re-measured 2026-08-22 (STYLE.md §4): the reference is effectively
   // grain-FREE — high-pass sigma is 0.02-0.24/255 in flat areas. The old

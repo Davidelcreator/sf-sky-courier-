@@ -404,3 +404,55 @@ there the canvas is partly drawn over it, unlike the clean sky-preset case.)
 
 **No fix proposed here** — reporting the name and the measurements first,
 as instructed.
+
+### The backdrop fix — the real bug, not the band (2026-08-25)
+
+**Why the canvas is transparent, measured exactly.** Rendering the same
+frame over a black and a white body background gives per-pixel alpha
+directly (`result = a·canvas + (1−a)·background`, so `a = 1 − (R_white −
+R_black)/255`):
+
+| preset | see-through | where |
+|---|---|---|
+| `main` | **5.80%** (53,486 px) | `y 62–174`, a horizontal band |
+| `sky` | **19.10%** (176,063 px) | `y 198–337`, full width |
+
+In both cases it is one band, sandwiched between **the bottom of MapLibre's
+sky and the far edge of the terrain mesh**. The terrain simply stops short
+of the horizon, and nothing is drawn in the gap. That also corrects an
+earlier label of mine: what I sampled as "water_far" in the `main` preset
+was substantially see-through canvas, not water.
+
+**Rejected fix, tested not assumed:** restore the style's `background`
+layer (it exists, colour `#f8f4f0`, and `setBasemap` hides it along with
+the vector fills). Re-enabling it changed the transparency **not at all** —
+53,486 and 176,063 pixels, identical to the byte. With terrain enabled
+MapLibre drapes `background` on the terrain mesh, so it cannot fill a gap
+that exists precisely *because* the mesh ended.
+
+**Applied fix:** the gradient moves off `html, body` onto a new `#backdrop`
+div that sits *in front of* body and *behind* `#map`, and `applyLook()`
+gives it the **identical** filter string as the canvas. Its three colour
+stops become `LOOK.backdropTop/Mid/Bottom` with P-panel sliders, so it is
+under the same control regime as every other visual value. `body` keeps a
+flat fallback so nothing white can ever show.
+
+This is the actual bug David named: the grade is `canvas.style.filter`, so
+anything painted behind the canvas was outside every visual decision this
+project has made. The band was only where that became visible.
+
+| | before | after |
+|---|---|---|
+| `main` band sat | 0.520 | **0.400** |
+| `sky` band sat | 0.490 | **0.369** |
+| asphalt / towers / sky / terrain | — | **delta 0.0/255 — untouched** |
+
+Verification: FPS **35.6** vs 34.9 baseline (inside the 1 fps budget);
+play mode 21 NPCs, 0 page errors. Determinism holds — `main` 55 px at max
+delta 4 (inside its 6/255 floor). **Honest note:** the `sky` preset is no
+longer bit-identical (243 px at max delta **1**); the CSS gradient dithers
+very slightly differently run to run. Still far inside any verdict
+threshold, but its floor is now 1/255, not 0.
+
+Remaining, and NOT chased: at sat 0.369–0.400 the backdrop is still above
+the reference ceiling of 0.341. It is now a slider, so it is David's dial.

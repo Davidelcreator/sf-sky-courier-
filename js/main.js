@@ -618,12 +618,22 @@ function applyLook() {
   // Global grade: one CSS filter on the render canvas. The compositor
   // does this for free, and it hits EVERYTHING drawn in the frame —
   // map, buildings, water, our 3D objects, labels.
+  const gradeCss =
+    `saturate(${LOOK.gradeSaturate}) contrast(${LOOK.gradeContrast})` +
+    ` brightness(${LOOK.gradeBrightness})` +
+    (LOOK.gradeBlur > 0 ? ` blur(${LOOK.gradeBlur}px)` : '');
   const canvas = map.getCanvas && map.getCanvas();
-  if (canvas) {
-    canvas.style.filter =
-      `saturate(${LOOK.gradeSaturate}) contrast(${LOOK.gradeContrast})` +
-      ` brightness(${LOOK.gradeBrightness})` +
-      (LOOK.gradeBlur > 0 ? ` blur(${LOOK.gradeBlur}px)` : '');
+  if (canvas) canvas.style.filter = gradeCss;
+
+  // The backdrop gets the IDENTICAL filter. Where the canvas is opaque we
+  // see the graded canvas; where it is see-through we see the graded
+  // backdrop — so the two agree instead of the backdrop sitting outside
+  // the grade the way it did when this gradient lived on html/body.
+  const backdrop = document.getElementById('backdrop');
+  if (backdrop) {
+    backdrop.style.background =
+      `linear-gradient(${LOOK.backdropTop} 0%, ${LOOK.backdropMid} 45%, ${LOOK.backdropBottom} 100%)`;
+    backdrop.style.filter = gradeCss;
   }
 
   // Film-grain overlay: a small tiled noise image on a div above the
@@ -691,6 +701,9 @@ const LOOK_PANEL = [
   ['treeUnderDark', 'Canopy shadow under ×', 0.4, 1, 0.02],
   ['shadowOpacity', 'Building shadow darkness', 0, 0.8, 0.01],
   ['windowOpacity', 'Facade windows (0=off)', 0, 1, 0.02],
+  ['backdropTop', 'Backdrop top', 'color'],
+  ['backdropMid', 'Backdrop middle', 'color'],
+  ['backdropBottom', 'Backdrop bottom', 'color'],
   ['gradeBlur', 'Softness (blur px)', 0, 2, 0.05],
   ['grainOpacity', 'Film grain', 0, 0.3, 0.005],
   // Prefixed keys live in other config objects: 'r3:' → ROADS3D,

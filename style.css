@@ -12,15 +12,29 @@ html, body {
   height: 100%;
   overflow: hidden;
   font-family: "Segoe UI", system-ui, sans-serif;
-  /* Sky trick: MapLibre leaves the area above the horizon transparent,
-     so this gradient shows through and becomes the sky when you fly. */
-  background: linear-gradient(#3d6fb5 0%, #7db3e8 45%, #cfe6f7 100%);
+  /* A flat fallback only. The real backdrop gradient lives on #backdrop
+     below, so that it sits IN FRONT of body and can be colour-graded with
+     the canvas. Anything painted here would be behind the canvas and
+     outside the grade — that was the old bug. */
+  background: #7db3e8;
+}
+
+/* Backdrop: fills the see-through band between MapLibre's sky and the far
+   edge of the terrain mesh. Sits behind #map but in front of body, and
+   applyLook() gives it the same filter as the canvas so it is graded with
+   everything else. Colours come from LOOK.backdrop* (P-panel sliders). */
+#backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
 }
 
 /* The map canvas fills the whole screen. */
 #map {
   position: absolute;
   inset: 0;               /* shorthand for top/right/bottom/left: 0 */
+  z-index: 1;             /* above #backdrop */
   background: transparent;
   touch-action: none;     /* let us handle swipe-to-look without the
                              browser hijacking the gesture to scroll/zoom */
