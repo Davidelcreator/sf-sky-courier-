@@ -456,3 +456,29 @@ threshold, but its floor is now 1/255, not 0.
 
 Remaining, and NOT chased: at sat 0.369–0.400 the backdrop is still above
 the reference ceiling of 0.341. It is now a slider, so it is David's dial.
+
+## Visual pass CLOSED (2026-08-25)
+
+Direction changed: this build is the mobile product; the console-style
+version is a separate Unreal Engine 5 build. No A3 sky recolour, no further
+reference chasing. The visual ceiling belongs to the other build now.
+
+Written up in **[VISUAL_METHOD.md](VISUAL_METHOD.md)** — what the pass
+LEARNED rather than what it changed, so the Unreal build inherits the
+rigour from a document instead of commit archaeology: the target in numbers
+(engine-agnostic), the deterministic-capture method, the noise-floor and
+pixel-comparison discipline, the ten measurement traps that produced false
+findings here, and the engine limits proved by experiment.
+
+**Flagged in VISUAL_METHOD.md §3.3:** the handoff named two proved engine
+limits — fog-vs-fill-extrusion, and "a catalogue line's title is silently
+discarded". Only the first is sourceable from this work. Nothing in this
+pass involved a catalogue or a discarded title, so rather than invent a
+finding to fit the label I left the gap explicit and listed the three other
+limits this pass did establish, in case one of them was meant.
+
+Shipped over the pass: A1 grain (correct, near-invisible), A9 building tone
+(the visible one), the NPC and hover determinism fixes, the named capture
+presets, and the backdrop grade fix. Parked with evidence: A2 water and A4
+lanes (knob-disconnects), B4 aerial haze (impossible in 5.6), A3 sky
+(direction changed before it was reached).
